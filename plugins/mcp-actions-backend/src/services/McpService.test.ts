@@ -19,6 +19,7 @@ import { McpService } from './McpService';
 import {
   actionsRegistryServiceMock,
   metricsServiceMock,
+  tracingServiceMock,
 } from '@backstage/backend-test-utils/alpha';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -49,6 +50,7 @@ describe('McpService', () => {
     const mcpService = await McpService.create({
       actions: mockActionsRegistry,
       metrics: mockMetrics,
+      tracingService: tracingServiceMock.mock(),
     });
 
     const server = mcpService.getServer({
@@ -121,6 +123,7 @@ describe('McpService', () => {
     const mcpService = await McpService.create({
       actions: mockActionsRegistry,
       metrics: mockMetrics,
+      tracingService: tracingServiceMock.mock(),
     });
 
     const server = mcpService.getServer({
@@ -174,6 +177,7 @@ describe('McpService', () => {
     const mcpService = await McpService.create({
       actions: mockActionsRegistry,
       metrics: mockMetrics,
+      tracingService: tracingServiceMock.mock(),
     });
 
     const server = mcpService.getServer({
@@ -238,6 +242,7 @@ describe('McpService', () => {
     const mcpService = await McpService.create({
       actions: actionsRegistryServiceMock(),
       metrics: mockMetrics,
+      tracingService: tracingServiceMock.mock(),
     });
 
     const server = mcpService.getServer({
@@ -306,6 +311,7 @@ describe('McpService', () => {
     const mcpService = await McpService.create({
       actions: mockActionsRegistry,
       metrics: mockMetrics,
+      tracingService: tracingServiceMock.mock(),
     });
 
     const server = mcpService.getServer({
@@ -366,6 +372,7 @@ describe('McpService', () => {
     const mcpService = await McpService.create({
       actions: mockActionsRegistry,
       metrics: metricsServiceMock.mock(),
+      tracingService: tracingServiceMock.mock(),
     });
 
     const server = mcpService.getServer({
@@ -422,6 +429,7 @@ describe('McpService', () => {
     const mcpService = await McpService.create({
       actions: mockActionsRegistry,
       metrics: metricsServiceMock.mock(),
+      tracingService: tracingServiceMock.mock(),
     });
 
     const server = mcpService.getServer({
@@ -509,6 +517,7 @@ describe('McpService', () => {
       const mcpService = await McpService.create({
         actions: fakeActionsService,
         metrics: metricsServiceMock.mock(),
+        tracingService: tracingServiceMock.mock(),
       });
 
       const serverConfig: McpServerConfig = {
@@ -542,6 +551,7 @@ describe('McpService', () => {
       const mcpService = await McpService.create({
         actions: fakeActionsService,
         metrics: metricsServiceMock.mock(),
+        tracingService: tracingServiceMock.mock(),
       });
 
       const serverConfig: McpServerConfig = {
@@ -583,6 +593,7 @@ describe('McpService', () => {
       const mcpService = await McpService.create({
         actions: fakeActionsService,
         metrics: metricsServiceMock.mock(),
+        tracingService: tracingServiceMock.mock(),
       });
 
       const serverConfig: McpServerConfig = {
@@ -621,6 +632,7 @@ describe('McpService', () => {
       const mcpService = await McpService.create({
         actions: fakeActionsService,
         metrics: metricsServiceMock.mock(),
+        tracingService: tracingServiceMock.mock(),
       });
 
       const serverConfig: McpServerConfig = {
@@ -659,6 +671,7 @@ describe('McpService', () => {
       const mcpService = await McpService.create({
         actions: fakeActionsService,
         metrics: metricsServiceMock.mock(),
+        tracingService: tracingServiceMock.mock(),
       });
 
       const serverConfig: McpServerConfig = {
@@ -711,6 +724,7 @@ describe('McpService', () => {
       const mcpService = await McpService.create({
         actions: actionsRegistryServiceMock(),
         metrics: metricsServiceMock.mock(),
+        tracingService: tracingServiceMock.mock(),
       });
 
       const server = mcpService.getServer({
@@ -734,6 +748,7 @@ describe('McpService', () => {
       const mcpService = await McpService.create({
         actions: actionsRegistryServiceMock(),
         metrics: metricsServiceMock.mock(),
+        tracingService: tracingServiceMock.mock(),
       });
 
       const server = mcpService.getServer({
@@ -763,6 +778,7 @@ describe('McpService', () => {
       const mcpService = await McpService.create({
         actions: actionsRegistryServiceMock(),
         metrics: metricsServiceMock.mock(),
+        tracingService: tracingServiceMock.mock(),
       });
 
       const server = mcpService.getServer({
@@ -805,6 +821,7 @@ describe('McpService', () => {
       const mcpService = await McpService.create({
         actions: mockActionsRegistry,
         metrics: metricsServiceMock.mock(),
+        tracingService: tracingServiceMock.mock(),
       });
 
       const server = mcpService.getServer({
@@ -843,6 +860,7 @@ describe('McpService', () => {
       const mcpService = await McpService.create({
         actions: mockActionsRegistry,
         metrics: metricsServiceMock.mock(),
+        tracingService: tracingServiceMock.mock(),
         namespacedToolNames: false,
       });
 
@@ -882,6 +900,7 @@ describe('McpService', () => {
       const mcpService = await McpService.create({
         actions: mockActionsRegistry,
         metrics: metricsServiceMock.mock(),
+        tracingService: tracingServiceMock.mock(),
       });
 
       const server = mcpService.getServer({
@@ -905,6 +924,165 @@ describe('McpService', () => {
       );
 
       expect(result.isError).toBeUndefined();
+    });
+  });
+
+  describe('tracing', () => {
+    async function invokeMockAction(opts: {
+      tracing: ReturnType<typeof tracingServiceMock.mock>;
+      captureToolPayloads?: boolean;
+      credentials?:
+        | ReturnType<typeof mockCredentials.user>
+        | ReturnType<typeof mockCredentials.service>;
+    }) {
+      const mockActionsRegistry = actionsRegistryServiceMock();
+      mockActionsRegistry.register({
+        name: 'mock-action',
+        title: 'Test',
+        description: 'Test',
+        schema: {
+          input: z => z.object({ input: z.string() }),
+          output: z => z.object({ output: z.string() }),
+        },
+        action: async () => ({ output: { output: 'test' } }),
+      });
+
+      const mcpService = await McpService.create({
+        actions: mockActionsRegistry,
+        metrics: metricsServiceMock.mock(),
+        tracingService: opts.tracing,
+        captureToolPayloads: opts.captureToolPayloads,
+      });
+
+      const server = mcpService.getServer({
+        credentials: opts.credentials ?? mockCredentials.user(),
+      });
+
+      const client = new Client({ name: 'test client', version: '1.0' });
+      const [clientTransport, serverTransport] =
+        InMemoryTransport.createLinkedPair();
+      await Promise.all([
+        client.connect(clientTransport),
+        server.connect(serverTransport),
+      ]);
+
+      return client.request(
+        {
+          method: 'tools/call',
+          params: { name: 'test.mock-action', arguments: { input: 'val' } },
+        },
+        CallToolResultSchema,
+      );
+    }
+
+    it('starts a tools/call span with spec attributes, server kind, and the request credentials', async () => {
+      const tracing = tracingServiceMock.mock();
+      const credentials = mockCredentials.user();
+      await invokeMockAction({ tracing, credentials });
+
+      expect(tracing.startActiveSpan).toHaveBeenCalledTimes(1);
+      const [name, , options] = tracing.startActiveSpan.mock.calls[0];
+      expect(name).toBe('tools/call test.mock-action');
+      expect(options?.kind).toBe('server');
+      expect(options?.attributes).toEqual(
+        expect.objectContaining({
+          'mcp.method.name': 'tools/call',
+          'gen_ai.tool.name': 'test.mock-action',
+          'gen_ai.operation.name': 'execute_tool',
+        }),
+      );
+      expect(options?.attributes).not.toHaveProperty(
+        'gen_ai.tool.call.arguments',
+      );
+      expect(options?.credentials).toBe(credentials);
+      expect(tracing.spans[0].setStatus).not.toHaveBeenCalled();
+    });
+
+    it('overrides backstage.plugin.id on the span to match the action source plugin', async () => {
+      const tracing = tracingServiceMock.mock();
+      await invokeMockAction({ tracing });
+
+      // The mock action is registered via actionsRegistryServiceMock(),
+      // which assigns pluginId 'test'.
+      expect(tracing.spans[0].setAttribute).toHaveBeenCalledWith(
+        'backstage.plugin.id',
+        'test',
+      );
+    });
+
+    it('includes tool arguments in the span options and sets the result via setAttribute when captureToolPayloads is true', async () => {
+      const tracing = tracingServiceMock.mock();
+      await invokeMockAction({ tracing, captureToolPayloads: true });
+
+      const [, , options] = tracing.startActiveSpan.mock.calls[0];
+      expect(options?.attributes?.['gen_ai.tool.call.arguments']).toBe(
+        JSON.stringify({ input: 'val' }),
+      );
+
+      const span = tracing.spans[0];
+      const resultCall = span.setAttribute.mock.calls.find(
+        ([key]) => key === 'gen_ai.tool.call.result',
+      );
+      expect(resultCall).toBeDefined();
+      const parsed = JSON.parse(resultCall![1] as string);
+      expect(parsed.content[0].type).toBe('text');
+      expect(parsed.content[0].text).toContain('"output": "test"');
+    });
+
+    it('sets error.type=tool_error and ERROR status on the span when the tool returns isError', async () => {
+      const tracing = tracingServiceMock.mock();
+      const mockActionsRegistry = actionsRegistryServiceMock();
+      mockActionsRegistry.register({
+        name: 'failing-action',
+        title: 'Failing',
+        description: 'Throws InputError',
+        schema: {
+          input: z => z.object({ value: z.string() }),
+          output: z => z.object({}),
+        },
+        action: async () => {
+          throw new InputError('the value was invalid');
+        },
+      });
+
+      const mcpService = await McpService.create({
+        actions: mockActionsRegistry,
+        metrics: metricsServiceMock.mock(),
+        tracingService: tracing,
+      });
+
+      const server = mcpService.getServer({
+        credentials: mockCredentials.user(),
+      });
+      const client = new Client({ name: 'test client', version: '1.0' });
+      const [clientTransport, serverTransport] =
+        InMemoryTransport.createLinkedPair();
+      await Promise.all([
+        client.connect(clientTransport),
+        server.connect(serverTransport),
+      ]);
+
+      const result = await client.request(
+        {
+          method: 'tools/call',
+          params: {
+            name: 'test.failing-action',
+            arguments: { value: 'test' },
+          },
+        },
+        CallToolResultSchema,
+      );
+      expect(result.isError).toBe(true);
+
+      const span = tracing.spans[0];
+      expect(span.setAttribute).toHaveBeenCalledWith(
+        'error.type',
+        'tool_error',
+      );
+      expect(span.setStatus).toHaveBeenCalledWith({
+        code: 'error',
+        message: 'tool_error',
+      });
     });
   });
 });
