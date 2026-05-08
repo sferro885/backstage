@@ -265,12 +265,16 @@ export interface Config {
             orgs?: string[];
 
             /**
-             * (Optional) Whether to exclude suspended users. When enabled, uses
-             * the REST API to detect suspension status without requiring site_admin
-             * scope. Only has an effect on GitHub Enterprise instances.
+             * (Optional) Whether to skip the suspended user check. By default,
+             * suspended users are automatically excluded on GitHub Enterprise
+             * instances using the REST API (without requiring site_admin scope).
+             * Set to `true` to disable the check, e.g. if REST API rate limits
+             * are a concern. Be aware that if this check is disabled, suspended
+             * users will appear in the catalog with no way of distinguishing
+             * them from active valid users.
              * Default: `false`.
              */
-            excludeSuspendedUsers?: boolean;
+            dangerouslySkipSuspendedUserCheck?: boolean;
 
             /**
              * (Optional) Configuration for the default user transformer.
@@ -342,12 +346,16 @@ export interface Config {
             orgs?: string[];
 
             /**
-             * (Optional) Whether to exclude suspended users. When enabled, uses
-             * the REST API to detect suspension status without requiring site_admin
-             * scope. Only has an effect on GitHub Enterprise instances.
+             * (Optional) Whether to skip the suspended user check. By default,
+             * suspended users are automatically excluded on GitHub Enterprise
+             * instances using the REST API (without requiring site_admin scope).
+             * Set to `true` to disable the check, e.g. if REST API rate limits
+             * are a concern. Be aware that if this check is disabled, suspended
+             * users will appear in the catalog with no way of distinguishing
+             * them from active valid users.
              * Default: `false`.
              */
-            excludeSuspendedUsers?: boolean;
+            dangerouslySkipSuspendedUserCheck?: boolean;
 
             /**
              * (Optional) Configuration for the default user transformer.

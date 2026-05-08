@@ -1,5 +1,6 @@
 ---
-'@backstage/plugin-catalog-backend-module-github': patch
+'@backstage/plugin-catalog-backend-module-github': minor
+'@backstage/plugin-catalog-backend-module-github-org': minor
 ---
 
-Suspended user detection now uses the GitHub REST API instead of the GraphQL `suspendedAt` field when `excludeSuspendedUsers` is enabled, removing the requirement for `site_admin` scope on GitHub Enterprise instances. In addition to account-level suspension, org-level membership suspension is now also detected and excluded.
+Suspended users are now automatically excluded on GitHub Enterprise instances using the REST API, without requiring `site_admin` scope. Both account-level suspension and org-membership suspension are detected. This replaces the previous `excludeSuspendedUsers` option (which defaulted to off) with `dangerouslySkipSuspendedUserCheck` (which defaults to off, meaning the check runs by default). Set `dangerouslySkipSuspendedUserCheck: true` to disable the check if REST API rate limits are a concern.

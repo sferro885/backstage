@@ -126,7 +126,8 @@ export const catalogModuleGithubOrgEntityProvider = createBackendModule({
               alwaysUseDefaultNamespace:
                 definitions.length === 1 && definition.orgs?.length === 1,
               pageSizes: definition.pageSizes,
-              excludeSuspendedUsers: definition.excludeSuspendedUsers,
+              dangerouslySkipSuspendedUserCheck:
+                definition.dangerouslySkipSuspendedUserCheck,
             }),
           );
         }
@@ -145,7 +146,7 @@ function readDefinitionsFromConfig(rootConfig: Config): Array<{
     teamMembers?: number;
     organizationMembers?: number;
   };
-  excludeSuspendedUsers?: boolean;
+  dangerouslySkipSuspendedUserCheck?: boolean;
   useVerifiedEmails?: boolean;
 }> {
   const baseKey = 'catalog.providers.githubOrg';
@@ -174,8 +175,8 @@ function readDefinitionsFromConfig(rootConfig: Config): Array<{
           ),
         }
       : undefined,
-    excludeSuspendedUsers:
-      c.getOptionalBoolean('excludeSuspendedUsers') ?? false,
+    dangerouslySkipSuspendedUserCheck:
+      c.getOptionalBoolean('dangerouslySkipSuspendedUserCheck') ?? false,
     useVerifiedEmails:
       c.getOptionalBoolean('defaultUserTransformer.useVerifiedEmails') ?? false,
   }));

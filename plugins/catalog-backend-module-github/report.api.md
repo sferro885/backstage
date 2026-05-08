@@ -157,7 +157,7 @@ export class GithubMultiOrgEntityProvider implements EntityProvider {
     teamTransformer?: TeamTransformer;
     alwaysUseDefaultNamespace?: boolean;
     pageSizes?: Partial<GithubPageSizes>;
-    excludeSuspendedUsers?: boolean;
+    dangerouslySkipSuspendedUserCheck?: boolean;
   });
   connect(connection: EntityProviderConnection): Promise<void>;
   // (undocumented)
@@ -172,8 +172,8 @@ export class GithubMultiOrgEntityProvider implements EntityProvider {
 // @public
 export interface GithubMultiOrgEntityProviderOptions {
   alwaysUseDefaultNamespace?: boolean;
+  dangerouslySkipSuspendedUserCheck?: boolean;
   events?: EventsService;
-  excludeSuspendedUsers?: boolean;
   githubCredentialsProvider?: GithubCredentialsProvider;
   githubUrl: string;
   id: string;
@@ -236,7 +236,7 @@ export class GithubOrgEntityProvider implements EntityProvider {
     userTransformer?: UserTransformer;
     teamTransformer?: TeamTransformer;
     pageSizes?: Partial<GithubPageSizes>;
-    excludeSuspendedUsers?: boolean;
+    dangerouslySkipSuspendedUserCheck?: boolean;
   });
   connect(connection: EntityProviderConnection): Promise<void>;
   // (undocumented)
@@ -253,8 +253,8 @@ export type GitHubOrgEntityProviderOptions = GithubOrgEntityProviderOptions;
 
 // @public
 export interface GithubOrgEntityProviderOptions {
+  dangerouslySkipSuspendedUserCheck?: boolean;
   events?: EventsService;
-  excludeSuspendedUsers?: boolean;
   githubCredentialsProvider?: GithubCredentialsProvider;
   id: string;
   logger: LoggerService;

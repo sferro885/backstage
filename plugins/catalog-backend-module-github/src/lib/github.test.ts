@@ -235,15 +235,7 @@ describe('github', () => {
       } as any;
 
       await expect(
-        getOrganizationUsers(
-          graphql,
-          restClientWithSuspended,
-          'a',
-          'token',
-          undefined,
-          undefined,
-          true,
-        ),
+        getOrganizationUsers(graphql, restClientWithSuspended, 'a', 'token'),
       ).resolves.toEqual(output);
     });
 
@@ -301,9 +293,6 @@ describe('github', () => {
         restClientWithOrgSuspended,
         'a',
         'token',
-        undefined,
-        undefined,
-        true,
       );
 
       expect(result.users).toHaveLength(1);
@@ -353,9 +342,6 @@ describe('github', () => {
         nonEnterpriseRestClient,
         'a',
         'token',
-        undefined,
-        undefined,
-        true,
       );
 
       expect(result.users).toHaveLength(2);
@@ -485,7 +471,7 @@ describe('github', () => {
       expect(users).toEqual(output);
     });
 
-    it('reads members including suspended users when excludeSuspendedUsers is false', async () => {
+    it('skips suspended user check when dangerouslySkipSuspendedUserCheck is true', async () => {
       const input: QueryResponse = {
         organization: {
           membersWithRole: {
@@ -537,7 +523,7 @@ describe('github', () => {
           'token',
           customUserTransformer,
           undefined,
-          false,
+          true,
         ),
       ).resolves.toEqual(output);
     });

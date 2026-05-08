@@ -177,13 +177,15 @@ export interface GithubMultiOrgEntityProviderOptions {
   pageSizes?: Partial<GithubPageSizes>;
 
   /**
-   * Whether to exclude suspended users when querying organization users.
-   * When enabled, uses the REST API to detect suspension status without
-   * requiring site_admin scope. Only has an effect on GitHub Enterprise
-   * instances, since github.com does not support user suspension.
+   * Whether to skip the suspended user check when querying organization users.
+   * By default, suspended users are automatically excluded on GitHub Enterprise
+   * instances using the REST API (without requiring site_admin scope).
+   * Set this to true to disable the check, e.g. if REST API rate limits are a concern.
+   * Be aware that if this check is disabled, suspended users will appear in the
+   * catalog with no way of distinguishing them from active valid users.
    * @defaultValue false
    */
-  excludeSuspendedUsers?: boolean;
+  dangerouslySkipSuspendedUserCheck?: boolean;
 }
 
 type CreateDeltaOperation = (entities: Entity[]) => {
@@ -231,7 +233,8 @@ export class GithubMultiOrgEntityProvider implements EntityProvider {
       events: options.events,
       alwaysUseDefaultNamespace: options.alwaysUseDefaultNamespace,
       pageSizes: options.pageSizes,
-      excludeSuspendedUsers: options.excludeSuspendedUsers,
+      dangerouslySkipSuspendedUserCheck:
+        options.dangerouslySkipSuspendedUserCheck,
     });
 
     provider.schedule(options.schedule);
@@ -252,7 +255,7 @@ export class GithubMultiOrgEntityProvider implements EntityProvider {
       teamTransformer?: TeamTransformer;
       alwaysUseDefaultNamespace?: boolean;
       pageSizes?: Partial<GithubPageSizes>;
-      excludeSuspendedUsers?: boolean;
+      dangerouslySkipSuspendedUserCheck?: boolean;
     },
   ) {}
 
@@ -327,7 +330,7 @@ export class GithubMultiOrgEntityProvider implements EntityProvider {
         tokenType,
         this.options.userTransformer,
         pageSizes,
-        this.options.excludeSuspendedUsers,
+        this.options.dangerouslySkipSuspendedUserCheck,
       );
 
       const { teams } = await getOrganizationTeams(
@@ -489,7 +492,7 @@ export class GithubMultiOrgEntityProvider implements EntityProvider {
       tokenType,
       this.options.userTransformer,
       pageSizes,
-      this.options.excludeSuspendedUsers,
+      this.options.dangerouslySkipSuspendedUserCheck,
     );
 
     const { teams } = await getOrganizationTeams(
@@ -740,7 +743,7 @@ export class GithubMultiOrgEntityProvider implements EntityProvider {
       tokenType,
       this.options.userTransformer,
       pageSizes,
-      this.options.excludeSuspendedUsers,
+      this.options.dangerouslySkipSuspendedUserCheck,
     );
 
     const usersFromChangedGroup = isGroupEntity(team)

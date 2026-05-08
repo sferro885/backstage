@@ -184,7 +184,7 @@ export type Connection<T> = {
  * @param tokenType - The type of GitHub credential
  * @param userTransformer - Optional transformer for user entities
  * @param pageSizes - Optional page sizes configuration
- * @param excludeSuspendedUsers - Optional flag to exclude suspended users (only for GitHub Enterprise instances)
+ * @param dangerouslySkipSuspendedUserCheck - Optional flag to skip the suspended user check. When false (the default), suspended users are automatically excluded on GitHub Enterprise instances using the REST API.
  */
 export async function getOrganizationUsers(
   gqlClient: typeof graphql,
@@ -193,7 +193,7 @@ export async function getOrganizationUsers(
   tokenType: GithubCredentialType,
   userTransformer: UserTransformer = defaultUserTransformer,
   pageSizes: GithubPageSizes = DEFAULT_PAGE_SIZES,
-  excludeSuspendedUsers: boolean = false,
+  dangerouslySkipSuspendedUserCheck: boolean = false,
 ): Promise<{ users: Entity[] }> {
   const query = `
     query users($org: String!, $email: Boolean!, $cursor: String, $organizationMembersPageSize: Int!) {
@@ -231,7 +231,7 @@ export async function getOrganizationUsers(
       organizationMembersPageSize: pageSizes.organizationMembers,
     },
     filter:
-      excludeSuspendedUsers && isGitHubEnterprise
+      !dangerouslySkipSuspendedUserCheck && isGitHubEnterprise
         ? async user => !(await isSuspended(user.login, restClient, { org }))
         : undefined,
   });

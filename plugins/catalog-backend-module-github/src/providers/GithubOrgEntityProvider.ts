@@ -145,13 +145,15 @@ export interface GithubOrgEntityProviderOptions {
   pageSizes?: Partial<GithubPageSizes>;
 
   /**
-   * Whether to exclude suspended users when querying organization users.
-   * When enabled, uses the REST API to detect suspension status without
-   * requiring site_admin scope. Only has an effect on GitHub Enterprise
-   * instances, since github.com does not support user suspension.
+   * Whether to skip the suspended user check when querying organization users.
+   * By default, suspended users are automatically excluded on GitHub Enterprise
+   * instances using the REST API (without requiring site_admin scope).
+   * Set this to true to disable the check, e.g. if REST API rate limits are a concern.
+   * Be aware that if this check is disabled, suspended users will appear in the
+   * catalog with no way of distinguishing them from active valid users.
    * @defaultValue false
    */
-  excludeSuspendedUsers?: boolean;
+  dangerouslySkipSuspendedUserCheck?: boolean;
 }
 
 /**
@@ -190,7 +192,8 @@ export class GithubOrgEntityProvider implements EntityProvider {
       teamTransformer: options.teamTransformer,
       events: options.events,
       pageSizes: options.pageSizes,
-      excludeSuspendedUsers: options.excludeSuspendedUsers,
+      dangerouslySkipSuspendedUserCheck:
+        options.dangerouslySkipSuspendedUserCheck,
     });
 
     provider.schedule(options.schedule);
@@ -209,7 +212,7 @@ export class GithubOrgEntityProvider implements EntityProvider {
       userTransformer?: UserTransformer;
       teamTransformer?: TeamTransformer;
       pageSizes?: Partial<GithubPageSizes>;
-      excludeSuspendedUsers?: boolean;
+      dangerouslySkipSuspendedUserCheck?: boolean;
     },
   ) {
     this.credentialsProvider =
@@ -281,7 +284,7 @@ export class GithubOrgEntityProvider implements EntityProvider {
       tokenType,
       this.options.userTransformer,
       pageSizes,
-      this.options.excludeSuspendedUsers,
+      this.options.dangerouslySkipSuspendedUserCheck,
     );
     const { teams } = await getOrganizationTeams(
       client,
@@ -419,7 +422,7 @@ export class GithubOrgEntityProvider implements EntityProvider {
       tokenType,
       this.options.userTransformer,
       pageSizes,
-      this.options.excludeSuspendedUsers,
+      this.options.dangerouslySkipSuspendedUserCheck,
     );
 
     if (!isGroupEntity(team)) {
