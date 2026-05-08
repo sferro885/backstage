@@ -29,8 +29,13 @@ import {
 } from './GithubMultiOrgEntityProvider';
 import { LoggerService } from '@backstage/backend-plugin-api';
 import { mockServices } from '@backstage/backend-test-utils';
+import { createRestClient } from '../lib/github';
 
 jest.mock('@octokit/graphql');
+jest.mock('../lib/github', () => ({
+  ...jest.requireActual('../lib/github'),
+  createRestClient: jest.fn(),
+}));
 
 const getAllInstallationsMock = jest.fn();
 jest.mock('@backstage/integration', () => ({
@@ -54,6 +59,9 @@ describe('GithubMultiOrgEntityProvider', () => {
     beforeEach(() => {
       mockClient = jest.fn();
       (graphql.defaults as jest.Mock).mockReturnValue(mockClient);
+      (createRestClient as jest.Mock).mockReturnValue({
+        request: jest.fn().mockResolvedValue({ headers: {} }),
+      });
 
       entityProviderConnection = {
         applyMutation: jest.fn(),
@@ -1052,6 +1060,10 @@ describe('GithubMultiOrgEntityProvider', () => {
     };
 
     beforeEach(async () => {
+      (createRestClient as jest.Mock).mockReturnValue({
+        request: jest.fn().mockResolvedValue({ headers: {} }),
+      });
+
       const logger = mockServices.logger.mock();
       events = DefaultEventsService.create({ logger });
       const config = new ConfigReader({

@@ -38,6 +38,7 @@ import {
   createReplaceEntitiesOperation,
   createGraphqlClient,
   getOrganizationTeamsForUser,
+  isSuspended,
 } from './github';
 import { Octokit } from '@octokit/core';
 import { throttling } from '@octokit/plugin-throttling';
@@ -55,6 +56,9 @@ describe('github', () => {
   registerMswTestHooks(server);
 
   const graphql = graphqlOctokit.defaults({});
+  const mockRestClient = {
+    request: jest.fn().mockResolvedValue({ headers: {} }),
+  } as any;
 
   describe('getOrganizationTeamsForUser', () => {
     const org = 'my-org';
@@ -165,7 +169,7 @@ describe('github', () => {
       );
 
       await expect(
-        getOrganizationUsers(graphql, 'a', 'token'),
+        getOrganizationUsers(graphql, mockRestClient, 'a', 'token'),
       ).resolves.toEqual(output);
     });
 
@@ -176,20 +180,18 @@ describe('github', () => {
             pageInfo: { hasNextPage: false },
             nodes: [
               {
-                login: 'a',
+                login: 'suspended-user',
                 name: 'b',
                 bio: 'c',
                 email: 'd',
                 avatarUrl: 'e',
-                suspendedAt: '2025-01-01',
               },
               {
-                login: 'a',
+                login: 'active-user',
                 name: 'b',
                 bio: 'c',
                 email: 'd',
                 avatarUrl: 'e',
-                suspendedAt: undefined,
               },
             ],
           },
@@ -199,7 +201,10 @@ describe('github', () => {
       const output = {
         users: [
           expect.objectContaining({
-            metadata: expect.objectContaining({ name: 'a', description: 'c' }),
+            metadata: expect.objectContaining({
+              name: 'active-user',
+              description: 'c',
+            }),
             spec: {
               profile: { displayName: 'b', email: 'd', picture: 'e' },
               memberOf: [],
@@ -212,9 +217,152 @@ describe('github', () => {
         graphqlMsw.query('users', () => HttpResponse.json({ data: input })),
       );
 
+      const restClientWithSuspended = {
+        request: jest.fn().mockImplementation((route: string, params: any) => {
+          if (route === 'GET /versions') {
+            return Promise.resolve({
+              headers: { 'x-github-enterprise-version': '3.12.0' },
+            });
+          }
+          if (route === 'GET /users/{username}') {
+            if (params.username === 'suspended-user') {
+              return { data: { suspended_at: '2025-01-01T00:00:00Z' } };
+            }
+            return { data: { suspended_at: null } };
+          }
+          return { data: { role: 'member', state: 'active' } };
+        }),
+      } as any;
+
       await expect(
-        getOrganizationUsers(graphql, 'a', 'token', undefined, undefined, true),
+        getOrganizationUsers(
+          graphql,
+          restClientWithSuspended,
+          'a',
+          'token',
+          undefined,
+          undefined,
+          true,
+        ),
       ).resolves.toEqual(output);
+    });
+
+    it('reads members excluding org-membership-suspended users', async () => {
+      const input: QueryResponse = {
+        organization: {
+          membersWithRole: {
+            pageInfo: { hasNextPage: false },
+            nodes: [
+              {
+                login: 'org-suspended-user',
+                name: 'b',
+                bio: 'c',
+                email: 'd',
+                avatarUrl: 'e',
+              },
+              {
+                login: 'active-user',
+                name: 'b',
+                bio: 'c',
+                email: 'd',
+                avatarUrl: 'e',
+              },
+            ],
+          },
+        },
+      };
+
+      server.use(
+        graphqlMsw.query('users', () => HttpResponse.json({ data: input })),
+      );
+
+      const restClientWithOrgSuspended = {
+        request: jest.fn().mockImplementation((route: string, params: any) => {
+          if (route === 'GET /versions') {
+            return Promise.resolve({
+              headers: { 'x-github-enterprise-version': '3.12.0' },
+            });
+          }
+          if (route === 'GET /users/{username}') {
+            return { data: { suspended_at: null } };
+          }
+          if (route === 'GET /orgs/{org}/memberships/{username}') {
+            if (params.username === 'org-suspended-user') {
+              return { data: { role: 'suspended', state: 'active' } };
+            }
+            return { data: { role: 'member', state: 'active' } };
+          }
+          return { data: {} };
+        }),
+      } as any;
+
+      const result = await getOrganizationUsers(
+        graphql,
+        restClientWithOrgSuspended,
+        'a',
+        'token',
+        undefined,
+        undefined,
+        true,
+      );
+
+      expect(result.users).toHaveLength(1);
+      expect(result.users[0].metadata.name).toBe('active-user');
+    });
+
+    it('skips suspended user check on non-enterprise GitHub', async () => {
+      const input: QueryResponse = {
+        organization: {
+          membersWithRole: {
+            pageInfo: { hasNextPage: false },
+            nodes: [
+              {
+                login: 'suspended-user',
+                name: 'b',
+                bio: 'c',
+                email: 'd',
+                avatarUrl: 'e',
+              },
+              {
+                login: 'active-user',
+                name: 'b',
+                bio: 'c',
+                email: 'd',
+                avatarUrl: 'e',
+              },
+            ],
+          },
+        },
+      };
+
+      server.use(
+        graphqlMsw.query('users', () => HttpResponse.json({ data: input })),
+      );
+
+      const nonEnterpriseRestClient = {
+        request: jest.fn().mockImplementation((route: string) => {
+          if (route === 'GET /versions') {
+            return Promise.resolve({ headers: {} });
+          }
+          throw new Error('isSuspended should not be called');
+        }),
+      } as any;
+
+      const result = await getOrganizationUsers(
+        graphql,
+        nonEnterpriseRestClient,
+        'a',
+        'token',
+        undefined,
+        undefined,
+        true,
+      );
+
+      expect(result.users).toHaveLength(2);
+      expect(nonEnterpriseRestClient.request).toHaveBeenCalledTimes(1);
+      expect(nonEnterpriseRestClient.request).toHaveBeenCalledWith(
+        'GET /versions',
+      );
     });
   });
 
@@ -276,7 +424,13 @@ describe('github', () => {
       );
 
       await expect(
-        getOrganizationUsers(graphql, 'a', 'token', customUserTransformer),
+        getOrganizationUsers(
+          graphql,
+          mockRestClient,
+          'a',
+          'token',
+          customUserTransformer,
+        ),
       ).resolves.toEqual(output);
     });
 
@@ -321,6 +475,7 @@ describe('github', () => {
 
       const users = await getOrganizationUsers(
         graphql,
+        mockRestClient,
         'a',
         'token',
         customUserTransformer,
@@ -330,7 +485,7 @@ describe('github', () => {
       expect(users).toEqual(output);
     });
 
-    it('reads members including suspended users', async () => {
+    it('reads members including suspended users when excludeSuspendedUsers is false', async () => {
       const input: QueryResponse = {
         organization: {
           membersWithRole: {
@@ -349,7 +504,6 @@ describe('github', () => {
                 bio: 'cc',
                 email: 'dd',
                 avatarUrl: 'ee',
-                suspendedAt: '2025-01-01',
               },
             ],
           },
@@ -378,6 +532,7 @@ describe('github', () => {
       await expect(
         getOrganizationUsers(
           graphql,
+          mockRestClient,
           'a',
           'token',
           customUserTransformer,
@@ -1061,6 +1216,58 @@ describe('github', () => {
     });
   });
 
+  describe('isSuspended', () => {
+    it('returns true when the user account is suspended', async () => {
+      const client = {
+        request: jest.fn().mockResolvedValue({
+          data: { suspended_at: '2025-01-01T00:00:00Z' },
+        }),
+      } as any;
+
+      await expect(isSuspended('suspended-user', client)).resolves.toBe(true);
+    });
+
+    it('returns false for an active user', async () => {
+      const client = {
+        request: jest.fn().mockResolvedValue({
+          data: { suspended_at: null },
+        }),
+      } as any;
+
+      await expect(isSuspended('active-user', client)).resolves.toBe(false);
+    });
+
+    it('returns true when org membership is suspended', async () => {
+      const client = {
+        request: jest.fn().mockImplementation((route: string) => {
+          if (route === 'GET /users/{username}') {
+            return { data: { suspended_at: null } };
+          }
+          return { data: { role: 'suspended', state: 'active' } };
+        }),
+      } as any;
+
+      await expect(
+        isSuspended('org-suspended', client, { org: 'my-org' }),
+      ).resolves.toBe(true);
+    });
+
+    it('does not check org membership when org is not provided', async () => {
+      const client = {
+        request: jest.fn().mockResolvedValue({
+          data: { suspended_at: null },
+        }),
+      } as any;
+
+      await isSuspended('some-user', client);
+
+      expect(client.request).toHaveBeenCalledTimes(1);
+      expect(client.request).toHaveBeenCalledWith('GET /users/{username}', {
+        username: 'some-user',
+      });
+    });
+  });
+
   describe('Page sizes configuration', () => {
     const org = 'my-org';
 
@@ -1130,12 +1337,19 @@ describe('github', () => {
         }),
       );
 
-      await getOrganizationUsers(graphql as any, org, 'token', undefined, {
-        teams: 10,
-        teamMembers: 20,
-        organizationMembers: 30,
-        repositories: 10,
-      });
+      await getOrganizationUsers(
+        graphql as any,
+        mockRestClient,
+        org,
+        'token',
+        undefined,
+        {
+          teams: 10,
+          teamMembers: 20,
+          organizationMembers: 30,
+          repositories: 10,
+        },
+      );
     });
 
     it('uses custom page sizes for getOrganizationRepositories', async () => {

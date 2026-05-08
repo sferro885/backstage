@@ -265,7 +265,9 @@ export interface Config {
             orgs?: string[];
 
             /**
-             * (Optional) Only for GitHub Enterprise. Whether to exclude suspended users when querying organization users.
+             * (Optional) Whether to exclude suspended users. When enabled, uses
+             * the REST API to detect suspension status without requiring site_admin
+             * scope. Only has an effect on GitHub Enterprise instances.
              * Default: `false`.
              */
             excludeSuspendedUsers?: boolean;
@@ -340,7 +342,9 @@ export interface Config {
             orgs?: string[];
 
             /**
-             * (Optional) Only for GitHub Enterprise. Whether to exclude suspended users when querying organization users.
+             * (Optional) Whether to exclude suspended users. When enabled, uses
+             * the REST API to detect suspension status without requiring site_admin
+             * scope. Only has an effect on GitHub Enterprise instances.
              * Default: `false`.
              */
             excludeSuspendedUsers?: boolean;

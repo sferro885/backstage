@@ -73,6 +73,7 @@ import {
   ANNOTATION_GITHUB_TEAM_SLUG,
   ANNOTATION_GITHUB_USER_LOGIN,
 } from '../lib/annotation';
+import { createRestClient } from '../lib';
 import {
   getOrganizationsFromUser,
   getOrganizationTeam,
@@ -176,10 +177,11 @@ export interface GithubMultiOrgEntityProviderOptions {
   pageSizes?: Partial<GithubPageSizes>;
 
   /**
-   * Optionally exclude suspended users when querying organization users.
+   * Whether to exclude suspended users when querying organization users.
+   * When enabled, uses the REST API to detect suspension status without
+   * requiring site_admin scope. Only has an effect on GitHub Enterprise
+   * instances, since github.com does not support user suspension.
    * @defaultValue false
-   * @remarks
-   * Only for GitHub Enterprise instances. Will error if used against GitHub.com API.
    */
   excludeSuspendedUsers?: boolean;
 }
@@ -297,13 +299,21 @@ export class GithubMultiOrgEntityProvider implements EntityProvider {
       : await this.getAllOrgs(this.options.gitHubConfig);
 
     for (const org of orgsToProcess) {
-      const { headers, type: tokenType } =
-        await this.options.githubCredentialsProvider.getCredentials({
-          url: `${this.options.githubUrl}/${org}`,
-        });
+      const {
+        headers,
+        type: tokenType,
+        token,
+      } = await this.options.githubCredentialsProvider.getCredentials({
+        url: `${this.options.githubUrl}/${org}`,
+      });
       const client = graphql.defaults({
         baseUrl: this.options.gitHubConfig.apiBaseUrl,
         headers,
+      });
+      const restClient = createRestClient({
+        token: token!,
+        baseUrl: this.options.gitHubConfig.apiBaseUrl!,
+        logger,
       });
 
       logger.info(`Reading GitHub users and teams for org: ${org}`);
@@ -312,6 +322,7 @@ export class GithubMultiOrgEntityProvider implements EntityProvider {
 
       const { users } = await getOrganizationUsers(
         client,
+        restClient,
         org,
         tokenType,
         this.options.userTransformer,
@@ -452,19 +463,28 @@ export class GithubMultiOrgEntityProvider implements EntityProvider {
     }
 
     const org = event.installation.account.login;
-    const { headers, type: tokenType } =
-      await this.options.githubCredentialsProvider.getCredentials({
-        url: `${this.options.githubUrl}/${org}`,
-      });
+    const {
+      headers,
+      type: tokenType,
+      token,
+    } = await this.options.githubCredentialsProvider.getCredentials({
+      url: `${this.options.githubUrl}/${org}`,
+    });
     const client = graphql.defaults({
       baseUrl: this.options.gitHubConfig.apiBaseUrl,
       headers,
+    });
+    const restClient = createRestClient({
+      token: token!,
+      baseUrl: this.options.gitHubConfig.apiBaseUrl!,
+      logger: this.options.logger,
     });
 
     const pageSizes = this.getPageSizes();
 
     const { users } = await getOrganizationUsers(
       client,
+      restClient,
       org,
       tokenType,
       this.options.userTransformer,
@@ -686,13 +706,21 @@ export class GithubMultiOrgEntityProvider implements EntityProvider {
     }
 
     const org = event.organization.login;
-    const { headers, type: tokenType } =
-      await this.options.githubCredentialsProvider.getCredentials({
-        url: `${this.options.githubUrl}/${org}`,
-      });
+    const {
+      headers,
+      type: tokenType,
+      token,
+    } = await this.options.githubCredentialsProvider.getCredentials({
+      url: `${this.options.githubUrl}/${org}`,
+    });
     const client = graphql.defaults({
       baseUrl: this.options.gitHubConfig.apiBaseUrl,
       headers,
+    });
+    const restClient = createRestClient({
+      token: token!,
+      baseUrl: this.options.gitHubConfig.apiBaseUrl!,
+      logger: this.options.logger,
     });
 
     const pageSizes = this.getPageSizes();
@@ -707,6 +735,7 @@ export class GithubMultiOrgEntityProvider implements EntityProvider {
 
     const { users } = await getOrganizationUsers(
       client,
+      restClient,
       org,
       tokenType,
       this.options.userTransformer,

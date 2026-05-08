@@ -119,7 +119,6 @@ export type GithubUser = {
   email?: string;
   name?: string;
   organizationVerifiedDomainEmails?: string[];
-  suspendedAt?: string;
 };
 
 /**
@@ -179,7 +178,8 @@ export type Connection<T> = {
  *
  * Note that the users will not have their memberships filled in.
  *
- * @param client - An octokit graphql client
+ * @param gqlClient - An octokit graphql client
+ * @param restClient - An octokit REST client, used for suspended user detection
  * @param org - The slug of the org to read
  * @param tokenType - The type of GitHub credential
  * @param userTransformer - Optional transformer for user entities
@@ -187,14 +187,14 @@ export type Connection<T> = {
  * @param excludeSuspendedUsers - Optional flag to exclude suspended users (only for GitHub Enterprise instances)
  */
 export async function getOrganizationUsers(
-  client: typeof graphql,
+  gqlClient: typeof graphql,
+  restClient: Octokit,
   org: string,
   tokenType: GithubCredentialType,
   userTransformer: UserTransformer = defaultUserTransformer,
   pageSizes: GithubPageSizes = DEFAULT_PAGE_SIZES,
   excludeSuspendedUsers: boolean = false,
 ): Promise<{ users: Entity[] }> {
-  const suspendedAtField = excludeSuspendedUsers ? 'suspendedAt,' : '';
   const query = `
     query users($org: String!, $email: Boolean!, $cursor: String, $organizationMembersPageSize: Int!) {
       organization(login: $org) {
@@ -207,7 +207,6 @@ export async function getOrganizationUsers(
             id,
             login,
             name,
-            ${suspendedAtField}
             organizationVerifiedDomainEmails(login: $org)
           }
         }
@@ -216,9 +215,12 @@ export async function getOrganizationUsers(
 
   // There is no user -> teams edge, so we leave the memberships empty for
   // now and let the team iteration handle it instead
+  const isGitHubEnterprise = await restClient
+    .request('GET /versions')
+    .then(response => !!response.headers['x-github-enterprise-version']);
 
   const users = await queryWithPaging({
-    client,
+    client: gqlClient,
     query,
     org,
     connection: r => r.organization?.membersWithRole,
@@ -228,7 +230,10 @@ export async function getOrganizationUsers(
       email: tokenType === 'token',
       organizationMembersPageSize: pageSizes.organizationMembers,
     },
-    filter: u => (excludeSuspendedUsers ? !u.suspendedAt : true),
+    filter:
+      excludeSuspendedUsers && isGitHubEnterprise
+        ? async user => !(await isSuspended(user.login, restClient, { org }))
+        : undefined,
   });
 
   return { users };
@@ -793,7 +798,7 @@ export async function queryWithPaging<
     ctx: TransformerContext,
   ) => Promise<OutputType | undefined>;
   variables: Variables;
-  filter?: (item: GraphqlType) => boolean;
+  filter?: (item: GraphqlType) => Promise<boolean> | boolean;
 }): Promise<OutputType[]> {
   const { client, query, org, connection, transformer, variables, filter } =
     params;
@@ -812,18 +817,18 @@ export async function queryWithPaging<
       throw new Error(`Found no match for ${JSON.stringify(variables)}`);
     }
 
-    for (const node of conn.nodes) {
-      if (filter && !filter(node)) {
-        continue;
-      }
-      const transformedNode = await transformer(node, {
-        client,
-        query,
-        org,
-      });
+    const transformed = await Promise.all(
+      conn.nodes.map(async node => {
+        if (filter && !(await filter(node))) {
+          return undefined;
+        }
+        return transformer(node, { client, query, org });
+      }),
+    );
 
-      if (transformedNode) {
-        result.push(transformedNode);
+    for (const node of transformed) {
+      if (node) {
+        result.push(node);
       }
     }
 
@@ -874,21 +879,13 @@ export const createReplaceEntitiesOperation =
     };
   };
 
-/**
- * Creates a GraphQL Client with Throttling and Retries
- */
-export const createGraphqlClient = (args: {
-  headers:
-    | {
-        [name: string]: string;
-      }
-    | undefined;
-  baseUrl: string;
-  logger: LoggerService;
-}): typeof graphql => {
-  const { headers, baseUrl, logger } = args;
+function createThrottledOctokit(
+  logger: LoggerService,
+  octokitOptions?: ConstructorParameters<typeof Octokit>[0],
+): Octokit {
   const ThrottledOctokit = Octokit.plugin(throttling, retry);
-  const octokit = new ThrottledOctokit({
+  return new ThrottledOctokit({
+    ...octokitOptions,
     throttle: {
       onRateLimit: (retryAfter, rateLimitData, _, retryCount) => {
         logger.warn(
@@ -920,11 +917,58 @@ export const createGraphqlClient = (args: {
       },
     },
   });
+}
 
-  const client = octokit.graphql.defaults({
-    headers,
-    baseUrl,
+/**
+ * Creates a GraphQL Client with Throttling and Retries
+ */
+export const createGraphqlClient = (args: {
+  headers:
+    | {
+        [name: string]: string;
+      }
+    | undefined;
+  baseUrl: string;
+  logger: LoggerService;
+}): typeof graphql => {
+  const octokit = createThrottledOctokit(args.logger);
+  return octokit.graphql.defaults({
+    headers: args.headers,
+    baseUrl: args.baseUrl,
   });
-
-  return client;
 };
+
+export function createRestClient(options: {
+  token: string;
+  baseUrl: string;
+  logger: LoggerService;
+}): Octokit {
+  return createThrottledOctokit(options.logger, {
+    auth: options.token,
+    baseUrl: options.baseUrl,
+  });
+}
+
+export async function isSuspended(
+  username: string,
+  restClient: Octokit,
+  options?: { org?: string },
+): Promise<boolean> {
+  const [userResponse, membershipResponse] = await Promise.all([
+    restClient.request('GET /users/{username}', { username }),
+    options?.org
+      ? restClient.request('GET /orgs/{org}/memberships/{username}', {
+          org: options.org,
+          username,
+        })
+      : undefined,
+  ]);
+
+  const accountSuspended = !!(userResponse.data as { suspended_at?: string })
+    .suspended_at;
+  const orgSuspended =
+    !!membershipResponse &&
+    (membershipResponse.data as { role?: string }).role === 'suspended';
+
+  return accountSuspended || orgSuspended;
+}

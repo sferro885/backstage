@@ -32,6 +32,7 @@ import { graphql } from '@octokit/graphql';
 import {
   assignGroupsToUsers,
   buildOrgHierarchy,
+  createRestClient,
   getOrganizationTeams,
   getOrganizationUsers,
   parseGithubOrgUrl,
@@ -94,14 +95,21 @@ export class GithubOrgReaderProcessor implements CatalogProcessor {
       return false;
     }
 
-    const { client, tokenType } = await this.createClient(location.target);
+    const { client, tokenType, restClient } = await this.createClient(
+      location.target,
+    );
     const { org } = parseGithubOrgUrl(location.target);
 
     // Read out all of the raw data
     const startTimestamp = Date.now();
     this.logger.info('Reading GitHub users and groups');
 
-    const { users } = await getOrganizationUsers(client, org, tokenType);
+    const { users } = await getOrganizationUsers(
+      client,
+      restClient,
+      org,
+      tokenType,
+    );
     const { teams } = await getOrganizationTeams(client, org);
 
     const duration = ((Date.now() - startTimestamp) / 1000).toFixed(1);
@@ -127,9 +135,11 @@ export class GithubOrgReaderProcessor implements CatalogProcessor {
     return true;
   }
 
-  private async createClient(
-    orgUrl: string,
-  ): Promise<{ client: GraphQL; tokenType: GithubCredentialType }> {
+  private async createClient(orgUrl: string): Promise<{
+    client: GraphQL;
+    restClient: import('@octokit/core').Octokit;
+    tokenType: GithubCredentialType;
+  }> {
     const gitHubConfig = this.integrations.github.byUrl(orgUrl)?.config;
 
     if (!gitHubConfig) {
@@ -138,16 +148,25 @@ export class GithubOrgReaderProcessor implements CatalogProcessor {
       );
     }
 
-    const { headers, type: tokenType } =
-      await this.githubCredentialsProvider.getCredentials({
-        url: orgUrl,
-      });
+    const {
+      headers,
+      type: tokenType,
+      token,
+    } = await this.githubCredentialsProvider.getCredentials({
+      url: orgUrl,
+    });
 
     const client = graphql.defaults({
       baseUrl: gitHubConfig.apiBaseUrl,
       headers,
     });
 
-    return { client, tokenType };
+    const restClient = createRestClient({
+      token: token!,
+      baseUrl: gitHubConfig.apiBaseUrl!,
+      logger: this.logger,
+    });
+
+    return { client, restClient, tokenType };
   }
 }

@@ -26,7 +26,7 @@ import {
   EventParams,
 } from '@backstage/plugin-events-node';
 import { graphql } from '@octokit/graphql';
-import { createGraphqlClient } from '../lib/github';
+import { createGraphqlClient, createRestClient } from '../lib/github';
 import { withLocations } from '../lib/withLocations';
 import { GithubOrgEntityProvider } from './GithubOrgEntityProvider';
 
@@ -34,6 +34,7 @@ jest.mock('@octokit/graphql');
 jest.mock('../lib/github', () => ({
   ...jest.requireActual('../lib/github'),
   createGraphqlClient: jest.fn(),
+  createRestClient: jest.fn(),
 }));
 
 describe('GithubOrgEntityProvider', () => {
@@ -45,6 +46,9 @@ describe('GithubOrgEntityProvider', () => {
     const setupMocks = (response: ((...args: any) => any) | undefined) => {
       mockClient = jest.fn().mockImplementation(response);
       (createGraphqlClient as jest.Mock).mockReturnValue(mockClient);
+      (createRestClient as jest.Mock).mockReturnValue({
+        request: jest.fn().mockResolvedValue({ headers: {} }),
+      });
     };
 
     beforeEach(() => {
@@ -829,6 +833,9 @@ describe('GithubOrgEntityProvider', () => {
         });
 
       (graphql.defaults as jest.Mock).mockReturnValue(mockClient);
+      (createRestClient as jest.Mock).mockReturnValue({
+        request: jest.fn().mockResolvedValue({ headers: {} }),
+      });
 
       await entityProvider.connect(entityProviderConnection);
 

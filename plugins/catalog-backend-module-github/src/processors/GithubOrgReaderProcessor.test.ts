@@ -23,8 +23,13 @@ import { LocationSpec } from '@backstage/plugin-catalog-node';
 import { graphql } from '@octokit/graphql';
 import { GithubOrgReaderProcessor } from './GithubOrgReaderProcessor';
 import { mockServices } from '@backstage/backend-test-utils';
+import { createRestClient } from '../lib/github';
 
 jest.mock('@octokit/graphql');
+jest.mock('../lib/github', () => ({
+  ...jest.requireActual('../lib/github'),
+  createRestClient: jest.fn(),
+}));
 
 describe('GithubOrgReaderProcessor', () => {
   describe('implementation', () => {
@@ -51,6 +56,9 @@ describe('GithubOrgReaderProcessor', () => {
 
     beforeEach(() => {
       jest.resetAllMocks();
+      (createRestClient as jest.Mock).mockReturnValue({
+        request: jest.fn().mockResolvedValue({ headers: {} }),
+      });
     });
 
     it('rejects unknown targets from integrations', async () => {

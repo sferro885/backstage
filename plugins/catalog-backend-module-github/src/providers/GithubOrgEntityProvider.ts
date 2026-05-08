@@ -62,6 +62,7 @@ import {
   GithubPageSizes,
   GithubTeam,
 } from '../lib/github';
+import { createRestClient } from '../lib';
 import { areGroupEntities, areUserEntities } from '../lib/guards';
 import {
   assignGroupsToUser,
@@ -144,10 +145,11 @@ export interface GithubOrgEntityProviderOptions {
   pageSizes?: Partial<GithubPageSizes>;
 
   /**
-   * Optionally exclude suspended users when querying organization users.
+   * Whether to exclude suspended users when querying organization users.
+   * When enabled, uses the REST API to detect suspension status without
+   * requiring site_admin scope. Only has an effect on GitHub Enterprise
+   * instances, since github.com does not support user suspension.
    * @defaultValue false
-   * @remarks
-   * Only for GitHub Enterprise instances. Will error if used against GitHub.com API.
    */
   excludeSuspendedUsers?: boolean;
 }
@@ -250,13 +252,22 @@ export class GithubOrgEntityProvider implements EntityProvider {
     const logger = options?.logger ?? this.options.logger;
     const { markReadComplete } = trackProgress(logger);
 
-    const { headers, type: tokenType } =
-      await this.credentialsProvider.getCredentials({
-        url: this.options.orgUrl,
-      });
+    const {
+      headers,
+      type: tokenType,
+      token,
+    } = await this.credentialsProvider.getCredentials({
+      url: this.options.orgUrl,
+    });
 
     const client = createGraphqlClient({
       headers,
+      baseUrl: this.options.gitHubConfig.apiBaseUrl!,
+      logger,
+    });
+
+    const restClient = createRestClient({
+      token: token!,
       baseUrl: this.options.gitHubConfig.apiBaseUrl!,
       logger,
     });
@@ -265,6 +276,7 @@ export class GithubOrgEntityProvider implements EntityProvider {
     const pageSizes = this.getPageSizes();
     const { users } = await getOrganizationUsers(
       client,
+      restClient,
       org,
       tokenType,
       this.options.userTransformer,
@@ -374,13 +386,21 @@ export class GithubOrgEntityProvider implements EntityProvider {
     }
 
     const teamSlug = event.team.slug;
-    const { headers, type: tokenType } =
-      await this.credentialsProvider.getCredentials({
-        url: this.options.orgUrl,
-      });
+    const {
+      headers,
+      type: tokenType,
+      token,
+    } = await this.credentialsProvider.getCredentials({
+      url: this.options.orgUrl,
+    });
     const client = graphql.defaults({
       baseUrl: this.options.gitHubConfig.apiBaseUrl,
       headers,
+    });
+    const restClient = createRestClient({
+      token: token!,
+      baseUrl: this.options.gitHubConfig.apiBaseUrl!,
+      logger: this.options.logger,
     });
 
     const { org } = parseGithubOrgUrl(this.options.orgUrl);
@@ -394,6 +414,7 @@ export class GithubOrgEntityProvider implements EntityProvider {
 
     const { users } = await getOrganizationUsers(
       client,
+      restClient,
       org,
       tokenType,
       this.options.userTransformer,

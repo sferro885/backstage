@@ -17,6 +17,7 @@
 export { readGithubMultiOrgConfig } from './config';
 export type { GithubMultiOrgConfig } from './config';
 export {
+  createRestClient,
   getOrganizationRepositories,
   getOrganizationTeams,
   getOrganizationUsers,

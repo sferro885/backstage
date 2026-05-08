@@ -319,7 +319,6 @@ export type GithubUser = {
   email?: string;
   name?: string;
   organizationVerifiedDomainEmails?: string[];
-  suspendedAt?: string;
 };
 
 // @public

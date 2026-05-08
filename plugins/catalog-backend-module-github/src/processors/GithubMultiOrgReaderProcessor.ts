@@ -39,6 +39,7 @@ import { graphql } from '@octokit/graphql';
 import {
   assignGroupsToUsers,
   buildOrgHierarchy,
+  createRestClient,
   defaultOrganizationTeamTransformer,
   defaultUserTransformer,
   getOrganizationTeams,
@@ -131,13 +132,21 @@ export class GithubMultiOrgReaderProcessor implements CatalogProcessor {
 
     for (const orgConfig of orgsToProcess) {
       try {
-        const { headers, type: tokenType } =
-          await this.githubCredentialsProvider.getCredentials({
-            url: `${baseUrl}/${orgConfig.name}`,
-          });
+        const {
+          headers,
+          type: tokenType,
+          token,
+        } = await this.githubCredentialsProvider.getCredentials({
+          url: `${baseUrl}/${orgConfig.name}`,
+        });
         const client = graphql.defaults({
           baseUrl: gitHubConfig.apiBaseUrl,
           headers,
+        });
+        const restClient = createRestClient({
+          token: token!,
+          baseUrl: gitHubConfig.apiBaseUrl!,
+          logger: this.logger,
         });
 
         const startTimestamp = Date.now();
@@ -146,6 +155,7 @@ export class GithubMultiOrgReaderProcessor implements CatalogProcessor {
         );
         const { users } = await getOrganizationUsers(
           client,
+          restClient,
           orgConfig.name,
           tokenType,
           async (githubUser, ctx): Promise<Entity | undefined> => {
