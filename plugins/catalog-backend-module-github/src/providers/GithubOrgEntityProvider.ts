@@ -125,9 +125,10 @@ export interface GithubOrgEntityProviderOptions {
   logger: LoggerService;
 
   /**
-   * Optional cache service used to make conditional HTTP requests when checking
-   * for suspended users. Cached ETags allow GitHub to return 304 Not Modified
-   * responses that don't count against the REST API rate limit.
+   * Optional cache service used to make conditional HTTP requests when
+   * checking for suspended users. When provided, responses are cached and
+   * revalidated using Last-Modified/ETag headers, so unchanged responses
+   * from GitHub don't count against the REST API rate limit.
    */
   cache?: CacheService;
 
@@ -156,7 +157,7 @@ export interface GithubOrgEntityProviderOptions {
    * Whether to skip the suspended user check when querying organization users.
    * By default, suspended users are automatically excluded on GitHub Enterprise
    * instances using the REST API (without requiring site_admin scope).
-   * Set this to true to disable the check, e.g. if REST API rate limits are a concern.
+   * Set this to true to disable the check if needed.
    * Be aware that if this check is disabled, suspended users will appear in the
    * catalog with no way of distinguishing them from active valid users.
    * @defaultValue false

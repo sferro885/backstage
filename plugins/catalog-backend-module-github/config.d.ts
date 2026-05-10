@@ -268,8 +268,8 @@ export interface Config {
              * (Optional) Whether to skip the suspended user check. By default,
              * suspended users are automatically excluded on GitHub Enterprise
              * instances using the REST API (without requiring site_admin scope).
-             * Set to `true` to disable the check, e.g. if REST API rate limits
-             * are a concern. Be aware that if this check is disabled, suspended
+             * Set to `true` to disable the check if needed.
+             * Be aware that if this check is disabled, suspended
              * users will appear in the catalog with no way of distinguishing
              * them from active valid users.
              * Default: `false`.
@@ -349,8 +349,8 @@ export interface Config {
              * (Optional) Whether to skip the suspended user check. By default,
              * suspended users are automatically excluded on GitHub Enterprise
              * instances using the REST API (without requiring site_admin scope).
-             * Set to `true` to disable the check, e.g. if REST API rate limits
-             * are a concern. Be aware that if this check is disabled, suspended
+             * Set to `true` to disable the check if needed.
+             * Be aware that if this check is disabled, suspended
              * users will appear in the catalog with no way of distinguishing
              * them from active valid users.
              * Default: `false`.
