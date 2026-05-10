@@ -6,6 +6,7 @@
 import { AnalyzeOptions } from '@backstage/plugin-catalog-node';
 import { AuthService } from '@backstage/backend-plugin-api';
 import { BackendFeature } from '@backstage/backend-plugin-api';
+import { CacheService } from '@backstage/backend-plugin-api';
 import { CatalogProcessor } from '@backstage/plugin-catalog-node';
 import { CatalogProcessorEmit } from '@backstage/plugin-catalog-node';
 import { CatalogService } from '@backstage/plugin-catalog-node';
@@ -158,6 +159,7 @@ export class GithubMultiOrgEntityProvider implements EntityProvider {
     alwaysUseDefaultNamespace?: boolean;
     pageSizes?: Partial<GithubPageSizes>;
     dangerouslySkipSuspendedUserCheck?: boolean;
+    cache?: CacheService;
   });
   connect(connection: EntityProviderConnection): Promise<void>;
   // (undocumented)
@@ -172,6 +174,7 @@ export class GithubMultiOrgEntityProvider implements EntityProvider {
 // @public
 export interface GithubMultiOrgEntityProviderOptions {
   alwaysUseDefaultNamespace?: boolean;
+  cache?: CacheService;
   dangerouslySkipSuspendedUserCheck?: boolean;
   events?: EventsService;
   githubCredentialsProvider?: GithubCredentialsProvider;
@@ -237,6 +240,7 @@ export class GithubOrgEntityProvider implements EntityProvider {
     teamTransformer?: TeamTransformer;
     pageSizes?: Partial<GithubPageSizes>;
     dangerouslySkipSuspendedUserCheck?: boolean;
+    cache?: CacheService;
   });
   connect(connection: EntityProviderConnection): Promise<void>;
   // (undocumented)
@@ -253,6 +257,7 @@ export type GitHubOrgEntityProviderOptions = GithubOrgEntityProviderOptions;
 
 // @public
 export interface GithubOrgEntityProviderOptions {
+  cache?: CacheService;
   dangerouslySkipSuspendedUserCheck?: boolean;
   events?: EventsService;
   githubCredentialsProvider?: GithubCredentialsProvider;

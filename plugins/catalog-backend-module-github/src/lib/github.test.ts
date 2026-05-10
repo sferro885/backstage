@@ -1205,22 +1205,32 @@ describe('github', () => {
   describe('isSuspended', () => {
     it('returns true when the user account is suspended', async () => {
       const client = {
-        request: jest.fn().mockResolvedValue({
-          data: { suspended_at: '2025-01-01T00:00:00Z' },
+        request: jest.fn().mockImplementation((route: string) => {
+          if (route === 'GET /users/{username}') {
+            return { data: { suspended_at: '2025-01-01T00:00:00Z' } };
+          }
+          return { data: { role: 'member', state: 'active' } };
         }),
       } as any;
 
-      await expect(isSuspended('suspended-user', client)).resolves.toBe(true);
+      await expect(
+        isSuspended('suspended-user', client, { org: 'my-org' }),
+      ).resolves.toBe(true);
     });
 
     it('returns false for an active user', async () => {
       const client = {
-        request: jest.fn().mockResolvedValue({
-          data: { suspended_at: null },
+        request: jest.fn().mockImplementation((route: string) => {
+          if (route === 'GET /users/{username}') {
+            return { data: { suspended_at: null } };
+          }
+          return { data: { role: 'member', state: 'active' } };
         }),
       } as any;
 
-      await expect(isSuspended('active-user', client)).resolves.toBe(false);
+      await expect(
+        isSuspended('active-user', client, { org: 'my-org' }),
+      ).resolves.toBe(false);
     });
 
     it('returns true when org membership is suspended', async () => {
@@ -1238,19 +1248,26 @@ describe('github', () => {
       ).resolves.toBe(true);
     });
 
-    it('does not check org membership when org is not provided', async () => {
+    it('checks both user suspension and org membership', async () => {
       const client = {
-        request: jest.fn().mockResolvedValue({
-          data: { suspended_at: null },
+        request: jest.fn().mockImplementation((route: string) => {
+          if (route === 'GET /users/{username}') {
+            return { data: { suspended_at: null } };
+          }
+          return { data: { role: 'member', state: 'active' } };
         }),
       } as any;
 
-      await isSuspended('some-user', client);
+      await isSuspended('some-user', client, { org: 'my-org' });
 
-      expect(client.request).toHaveBeenCalledTimes(1);
+      expect(client.request).toHaveBeenCalledTimes(2);
       expect(client.request).toHaveBeenCalledWith('GET /users/{username}', {
         username: 'some-user',
       });
+      expect(client.request).toHaveBeenCalledWith(
+        'GET /orgs/{org}/memberships/{username}',
+        { org: 'my-org', username: 'some-user' },
+      );
     });
   });
 

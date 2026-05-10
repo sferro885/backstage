@@ -83,6 +83,7 @@ import {
 import { splitTeamSlug } from '../lib/util';
 import { areGroupEntities, areUserEntities } from '../lib/guards';
 import {
+  CacheService,
   LoggerService,
   SchedulerServiceTaskRunner,
 } from '@backstage/backend-plugin-api';
@@ -144,6 +145,13 @@ export interface GithubMultiOrgEntityProviderOptions {
    * The logger to use.
    */
   logger: LoggerService;
+
+  /**
+   * Optional cache service used to make conditional HTTP requests when checking
+   * for suspended users. Cached ETags allow GitHub to return 304 Not Modified
+   * responses that don't count against the REST API rate limit.
+   */
+  cache?: CacheService;
 
   /**
    * Optionally supply a custom credentials provider, replacing the default one.
@@ -235,6 +243,7 @@ export class GithubMultiOrgEntityProvider implements EntityProvider {
       pageSizes: options.pageSizes,
       dangerouslySkipSuspendedUserCheck:
         options.dangerouslySkipSuspendedUserCheck,
+      cache: options.cache,
     });
 
     provider.schedule(options.schedule);
@@ -256,6 +265,7 @@ export class GithubMultiOrgEntityProvider implements EntityProvider {
       alwaysUseDefaultNamespace?: boolean;
       pageSizes?: Partial<GithubPageSizes>;
       dangerouslySkipSuspendedUserCheck?: boolean;
+      cache?: CacheService;
     },
   ) {}
 
@@ -317,6 +327,7 @@ export class GithubMultiOrgEntityProvider implements EntityProvider {
         token: token!,
         baseUrl: this.options.gitHubConfig.apiBaseUrl!,
         logger,
+        cache: this.options.cache,
       });
 
       logger.info(`Reading GitHub users and teams for org: ${org}`);
@@ -481,6 +492,7 @@ export class GithubMultiOrgEntityProvider implements EntityProvider {
       token: token!,
       baseUrl: this.options.gitHubConfig.apiBaseUrl!,
       logger: this.options.logger,
+      cache: this.options.cache,
     });
 
     const pageSizes = this.getPageSizes();
@@ -724,6 +736,7 @@ export class GithubMultiOrgEntityProvider implements EntityProvider {
       token: token!,
       baseUrl: this.options.gitHubConfig.apiBaseUrl!,
       logger: this.options.logger,
+      cache: this.options.cache,
     });
 
     const pageSizes = this.getPageSizes();

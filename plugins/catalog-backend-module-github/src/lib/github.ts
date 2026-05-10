@@ -28,9 +28,10 @@ import { withLocations } from './withLocations';
 
 import { DeferredEntity } from '@backstage/plugin-catalog-node';
 import { Octokit } from '@octokit/core';
-import { LoggerService } from '@backstage/backend-plugin-api';
+import { CacheService, LoggerService } from '@backstage/backend-plugin-api';
 import { throttling } from '@octokit/plugin-throttling';
 import { retry } from '@octokit/plugin-retry';
+import { JsonValue } from '@backstage/types';
 
 /**
  * Configuration for GitHub GraphQL API page sizes.
@@ -942,33 +943,114 @@ export function createRestClient(options: {
   token: string;
   baseUrl: string;
   logger: LoggerService;
+  cache?: CacheService;
 }): Octokit {
-  return createThrottledOctokit(options.logger, {
+  const octokit = createThrottledOctokit(options.logger, {
     auth: options.token,
     baseUrl: options.baseUrl,
+  });
+
+  if (options.cache) {
+    installConditionalRequestCache(octokit, options.cache);
+  }
+
+  return octokit;
+}
+
+type CachedGitHubResponse = {
+  lastModified?: string;
+  etag?: string;
+  headers: JsonValue;
+  data: JsonValue;
+};
+
+function installConditionalRequestCache(
+  octokit: Octokit,
+  cache: CacheService,
+): void {
+  octokit.hook.wrap('request', async (request, options) => {
+    const resolvedUrl = (options.url || '').replace(/\{([^}]+)\}/g, (_, key) =>
+      encodeURIComponent((options as any)[key]),
+    );
+    const cacheKey = `${options.method}:${options.baseUrl}${resolvedUrl}`;
+    const cached = await cache
+      .get<CachedGitHubResponse>(cacheKey)
+      .catch(() => undefined);
+
+    if (cached?.lastModified) {
+      options.headers['if-modified-since'] = cached.lastModified;
+    } else if (cached?.etag) {
+      options.headers['if-none-match'] = cached.etag;
+    }
+
+    try {
+      const response = await request(options);
+
+      const lastModified = response.headers['last-modified'];
+      const etag = response.headers.etag;
+
+      if (lastModified || etag) {
+        cache
+          .set(
+            cacheKey,
+            {
+              lastModified,
+              etag,
+              headers: response.headers as unknown as JsonValue,
+              data: response.data as unknown as JsonValue,
+            },
+            // The TTL can be long here, since we only use the cache for
+            // conditional GitHub requests - it's never returned unless we get a
+            // 304 back from GitHub indicating that it's still correct.
+            { ttl: { years: 1 } },
+          )
+          .catch(() => {});
+      }
+      return response;
+    } catch (error: any) {
+      if (error?.status === 304 && cached) {
+        return {
+          ...error.response,
+          headers: cached.headers,
+          data: cached.data,
+        };
+      }
+      throw error;
+    }
   });
 }
 
 export async function isSuspended(
   username: string,
   restClient: Octokit,
-  options?: { org?: string },
+  options: { org: string },
 ): Promise<boolean> {
   const [userResponse, membershipResponse] = await Promise.all([
     restClient.request('GET /users/{username}', { username }),
-    options?.org
-      ? restClient.request('GET /orgs/{org}/memberships/{username}', {
-          org: options.org,
-          username,
-        })
-      : undefined,
+    restClient.request('GET /orgs/{org}/memberships/{username}', {
+      org: options.org,
+      username,
+    }),
   ]);
 
-  const accountSuspended = !!(userResponse.data as { suspended_at?: string })
-    .suspended_at;
-  const orgSuspended =
-    !!membershipResponse &&
-    (membershipResponse.data as { role?: string }).role === 'suspended';
+  // Octokit types are based on the public GitHub API, and since public GitHub
+  // doesn't include the ability to suspend users, there's no "suspended_at"
+  // field on the type, nor a "suspended" role on org memberships. However these
+  // fields are present for GitHub Enterprise, so we augment the types to
+  // include them.
+  const userSuspendedAt = (
+    userResponse.data as typeof userResponse.data & { suspended_at?: string }
+  ).suspended_at;
+  const membershipRole = (
+    membershipResponse.data as
+      | typeof membershipResponse.data
+      | {
+          role?: 'suspended';
+        }
+  ).role;
 
-  return accountSuspended || orgSuspended;
+  const userSuspended = !!userSuspendedAt;
+  const orgMembershipSuspended = membershipRole === 'suspended';
+
+  return userSuspended || orgMembershipSuspended;
 }

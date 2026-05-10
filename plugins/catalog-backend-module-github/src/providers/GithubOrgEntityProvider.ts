@@ -15,6 +15,7 @@
  */
 
 import {
+  CacheService,
   LoggerService,
   SchedulerServiceTaskRunner,
 } from '@backstage/backend-plugin-api';
@@ -124,6 +125,13 @@ export interface GithubOrgEntityProviderOptions {
   logger: LoggerService;
 
   /**
+   * Optional cache service used to make conditional HTTP requests when checking
+   * for suspended users. Cached ETags allow GitHub to return 304 Not Modified
+   * responses that don't count against the REST API rate limit.
+   */
+  cache?: CacheService;
+
+  /**
    * Optionally supply a custom credentials provider, replacing the default one.
    */
   githubCredentialsProvider?: GithubCredentialsProvider;
@@ -194,6 +202,7 @@ export class GithubOrgEntityProvider implements EntityProvider {
       pageSizes: options.pageSizes,
       dangerouslySkipSuspendedUserCheck:
         options.dangerouslySkipSuspendedUserCheck,
+      cache: options.cache,
     });
 
     provider.schedule(options.schedule);
@@ -213,6 +222,7 @@ export class GithubOrgEntityProvider implements EntityProvider {
       teamTransformer?: TeamTransformer;
       pageSizes?: Partial<GithubPageSizes>;
       dangerouslySkipSuspendedUserCheck?: boolean;
+      cache?: CacheService;
     },
   ) {
     this.credentialsProvider =
@@ -273,6 +283,7 @@ export class GithubOrgEntityProvider implements EntityProvider {
       token: token!,
       baseUrl: this.options.gitHubConfig.apiBaseUrl!,
       logger,
+      cache: this.options.cache,
     });
 
     const { org } = parseGithubOrgUrl(this.options.orgUrl);
@@ -404,6 +415,7 @@ export class GithubOrgEntityProvider implements EntityProvider {
       token: token!,
       baseUrl: this.options.gitHubConfig.apiBaseUrl!,
       logger: this.options.logger,
+      cache: this.options.cache,
     });
 
     const { org } = parseGithubOrgUrl(this.options.orgUrl);

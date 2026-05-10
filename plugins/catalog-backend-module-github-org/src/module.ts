@@ -94,13 +94,14 @@ export const catalogModuleGithubOrgEntityProvider = createBackendModule({
     env.registerInit({
       deps: {
         catalog: catalogProcessingExtensionPoint,
+        cache: coreServices.cache,
         config: coreServices.rootConfig,
         events: eventsServiceRef,
         logger: coreServices.logger,
         scheduler: coreServices.scheduler,
       },
 
-      async init({ catalog, config, events, logger, scheduler }) {
+      async init({ catalog, cache, config, events, logger, scheduler }) {
         const definitions = readDefinitionsFromConfig(config);
 
         for (const definition of definitions) {
@@ -128,6 +129,7 @@ export const catalogModuleGithubOrgEntityProvider = createBackendModule({
               pageSizes: definition.pageSizes,
               dangerouslySkipSuspendedUserCheck:
                 definition.dangerouslySkipSuspendedUserCheck,
+              cache,
             }),
           );
         }
