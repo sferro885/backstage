@@ -214,12 +214,12 @@ export async function getOrganizationUsers(
       }
     }`;
 
+  const filterSuspendedUsers =
+    !dangerouslySkipSuspendedUserCheck &&
+    (await isGitHubEnterprise(restClient));
+
   // There is no user -> teams edge, so we leave the memberships empty for
   // now and let the team iteration handle it instead
-  const isGitHubEnterprise = await restClient
-    .request('GET /versions')
-    .then(response => !!response.headers['x-github-enterprise-version']);
-
   const users = await queryWithPaging({
     client: gqlClient,
     query,
@@ -231,10 +231,9 @@ export async function getOrganizationUsers(
       email: tokenType === 'token',
       organizationMembersPageSize: pageSizes.organizationMembers,
     },
-    filter:
-      !dangerouslySkipSuspendedUserCheck && isGitHubEnterprise
-        ? async user => !(await isSuspended(user.login, restClient, { org }))
-        : undefined,
+    filter: filterSuspendedUsers
+      ? async user => !(await isSuspended(user.login, restClient, { org }))
+      : undefined,
   });
 
   return { users };
@@ -1053,4 +1052,10 @@ export async function isSuspended(
   const orgMembershipSuspended = membershipRole === 'suspended';
 
   return userSuspended || orgMembershipSuspended;
+}
+
+async function isGitHubEnterprise(restClient: Octokit): Promise<boolean> {
+  return restClient
+    .request('GET /versions')
+    .then(response => !!response.headers['x-github-enterprise-version']);
 }
