@@ -20,7 +20,8 @@ import {
 } from '@backstage/backend-test-utils';
 import { GroupEntity, UserEntity } from '@backstage/catalog-model';
 import { graphql as graphqlOctokit } from '@octokit/graphql';
-import { graphql as graphqlMsw, HttpResponse } from 'msw';
+import { CacheService } from '@backstage/backend-plugin-api';
+import { graphql as graphqlMsw, http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import { TeamTransformer, UserTransformer } from './defaultTransformers';
 import {
@@ -39,17 +40,11 @@ import {
   createGraphqlClient,
   getOrganizationTeamsForUser,
   isSuspended,
+  createRestClient,
 } from './github';
 import { Octokit } from '@octokit/core';
 import { throttling } from '@octokit/plugin-throttling';
 import { retry } from '@octokit/plugin-retry';
-
-jest.mock('@octokit/core', () => ({
-  ...jest.requireActual('@octokit/core'),
-  Octokit: {
-    plugin: jest.fn().mockReturnValue({ defaults: jest.fn() }),
-  },
-}));
 
 describe('github', () => {
   const server = setupServer();
@@ -1132,25 +1127,36 @@ describe('github', () => {
 
     const logger = mockServices.rootLogger();
 
-    const mockClient = jest.fn().mockImplementation();
-
-    const graphqlDefaults = jest.fn().mockReturnValue(mockClient);
+    const graphqlDefaults = jest.fn().mockReturnValue(jest.fn());
     const mockedOctokit = jest.fn().mockImplementation(() => ({
       graphql: {
         defaults: graphqlDefaults,
       },
     }));
-    (Octokit.plugin as jest.Mock).mockReturnValue(mockedOctokit);
+
+    let client: ReturnType<typeof createGraphqlClient>;
+
+    let pluginSpy: jest.SpyInstance;
+
+    beforeEach(() => {
+      pluginSpy = jest
+        .spyOn(Octokit, 'plugin')
+        .mockReturnValue(
+          mockedOctokit as unknown as ReturnType<typeof Octokit.plugin>,
+        );
+
+      client = createGraphqlClient({ headers, baseUrl, logger });
+    });
+
+    afterEach(() => {
+      pluginSpy.mockRestore();
+    });
 
     const rateLimitOptions = {
       method: 'POST',
       url: '/graphql',
     };
-    const client = createGraphqlClient({
-      headers,
-      baseUrl,
-      logger,
-    });
+
     it('should return a graphql client with throttling and retry', async () => {
       expect(client).toBeDefined();
       expect(Octokit.plugin).toHaveBeenCalledWith(throttling, retry);
@@ -1198,6 +1204,298 @@ describe('github', () => {
         );
 
         expect(result).toBe(expectedResult);
+      });
+    });
+  });
+
+  describe('createRestClient', () => {
+    const baseUrl = 'https://api.github.com';
+
+    let pluginSpy: jest.SpyInstance;
+
+    beforeEach(() => {
+      pluginSpy = jest.spyOn(Octokit, 'plugin');
+    });
+
+    it('should construct a rest client with throttling and retry', async () => {
+      expect(
+        createRestClient({
+          token: 'test-token',
+          baseUrl,
+          logger: mockServices.logger.mock(),
+        }),
+      ).toBeDefined();
+
+      expect(Octokit.plugin).toHaveBeenCalledWith(throttling, retry);
+    });
+
+    it('should construct a rest client with the correct options', async () => {
+      const mockedOctokit = jest.fn();
+
+      pluginSpy.mockReturnValue(mockedOctokit);
+
+      createRestClient({
+        token: 'test-token',
+        baseUrl,
+        logger: mockServices.logger.mock(),
+      });
+
+      expect(mockedOctokit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          auth: 'test-token',
+          baseUrl,
+        }),
+      );
+
+      pluginSpy.mockRestore();
+    });
+
+    describe('conditional request caching', () => {
+      function createMockCache(): CacheService & {
+        store: Map<string, unknown>;
+      } {
+        const store = new Map<string, unknown>();
+        const cache: CacheService & { store: Map<string, unknown> } = {
+          store,
+          async get(key: string) {
+            return store.get(key) as any;
+          },
+          async set(key: string, value: unknown) {
+            store.set(key, value);
+          },
+          async delete(key: string) {
+            store.delete(key);
+          },
+          withOptions() {
+            return cache;
+          },
+        };
+        return cache;
+      }
+
+      it('caches responses using last-modified header', async () => {
+        let requestCount = 0;
+        server.use(
+          http.get(`${baseUrl}/users/testuser`, () => {
+            requestCount++;
+            return HttpResponse.json(
+              { login: 'testuser', suspended_at: null },
+              { headers: { 'Last-Modified': 'Thu, 01 Jan 2025 00:00:00 GMT' } },
+            );
+          }),
+        );
+
+        const cache = createMockCache();
+        const client = createRestClient({
+          token: 'test-token',
+          baseUrl,
+          logger: mockServices.logger.mock(),
+          cache,
+        });
+
+        await client.request('GET /users/{username}', { username: 'testuser' });
+
+        expect(requestCount).toBe(1);
+        const cached = cache.store.get(`GET:${baseUrl}/users/testuser`) as any;
+        expect(cached.lastModified).toBe('Thu, 01 Jan 2025 00:00:00 GMT');
+        expect(cached.data).toEqual({ login: 'testuser', suspended_at: null });
+      });
+
+      it('sends if-modified-since on subsequent requests', async () => {
+        let receivedHeaders: Record<string, string> = {};
+        server.use(
+          http.get(`${baseUrl}/users/testuser`, ({ request }) => {
+            receivedHeaders = Object.fromEntries(request.headers.entries());
+            return HttpResponse.json(
+              { login: 'testuser', suspended_at: null },
+              { headers: { 'Last-Modified': 'Thu, 01 Jan 2025 00:00:00 GMT' } },
+            );
+          }),
+        );
+
+        const cache = createMockCache();
+        cache.store.set(`GET:${baseUrl}/users/testuser`, {
+          lastModified: 'Wed, 01 Jan 2025 00:00:00 GMT',
+          data: { login: 'testuser', suspended_at: null },
+        });
+
+        const client = createRestClient({
+          token: 'test-token',
+          baseUrl,
+          logger: mockServices.logger.mock(),
+          cache,
+        });
+
+        await client.request('GET /users/{username}', { username: 'testuser' });
+
+        expect(receivedHeaders['if-modified-since']).toBe(
+          'Wed, 01 Jan 2025 00:00:00 GMT',
+        );
+      });
+
+      it('sends if-none-match when only etag is cached', async () => {
+        let receivedHeaders: Record<string, string> = {};
+        server.use(
+          http.get(`${baseUrl}/users/testuser`, ({ request }) => {
+            receivedHeaders = Object.fromEntries(request.headers.entries());
+            return HttpResponse.json(
+              { login: 'testuser', suspended_at: null },
+              { headers: { ETag: '"new-etag"' } },
+            );
+          }),
+        );
+
+        const cache = createMockCache();
+        cache.store.set(`GET:${baseUrl}/users/testuser`, {
+          etag: '"old-etag"',
+          data: { login: 'testuser', suspended_at: null },
+        });
+
+        const client = createRestClient({
+          token: 'test-token',
+          baseUrl,
+          logger: mockServices.logger.mock(),
+          cache,
+        });
+
+        await client.request('GET /users/{username}', { username: 'testuser' });
+
+        expect(receivedHeaders['if-none-match']).toBe('"old-etag"');
+        expect(receivedHeaders['if-modified-since']).toBeUndefined();
+      });
+
+      it('returns cached data and headers on 304 response', async () => {
+        const cachedData = { login: 'testuser', suspended_at: null };
+        const cachedHeaders = {
+          'x-github-enterprise-version': '3.12.0',
+          'last-modified': 'Thu, 01 Jan 2025 00:00:00 GMT',
+        };
+
+        server.use(
+          http.get(`${baseUrl}/users/testuser`, () => {
+            return new HttpResponse(null, { status: 304 });
+          }),
+        );
+
+        const cache = createMockCache();
+        cache.store.set(`GET:${baseUrl}/users/testuser`, {
+          lastModified: 'Thu, 01 Jan 2025 00:00:00 GMT',
+          headers: cachedHeaders,
+          data: cachedData,
+        });
+
+        const client = createRestClient({
+          token: 'test-token',
+          baseUrl,
+          logger: mockServices.logger.mock(),
+          cache,
+        });
+
+        const response = await client.request('GET /users/{username}', {
+          username: 'testuser',
+        });
+
+        expect(response.data).toEqual(cachedData);
+        expect(response.headers['x-github-enterprise-version']).toBe('3.12.0');
+      });
+
+      it('propagates non-304 errors', async () => {
+        server.use(
+          http.get(`${baseUrl}/users/testuser`, () => {
+            return new HttpResponse(JSON.stringify({ message: 'Not Found' }), {
+              status: 404,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }),
+        );
+
+        const cache = createMockCache();
+        const client = createRestClient({
+          token: 'test-token',
+          baseUrl,
+          logger: mockServices.logger.mock(),
+          cache,
+        });
+
+        await expect(
+          client.request('GET /users/{username}', { username: 'testuser' }),
+        ).rejects.toThrow();
+      });
+
+      it('prefers last-modified over etag for conditional headers', async () => {
+        let receivedHeaders: Record<string, string> = {};
+        server.use(
+          http.get(`${baseUrl}/users/testuser`, ({ request }) => {
+            receivedHeaders = Object.fromEntries(request.headers.entries());
+            return HttpResponse.json({ login: 'testuser' });
+          }),
+        );
+
+        const cache = createMockCache();
+        cache.store.set(`GET:${baseUrl}/users/testuser`, {
+          lastModified: 'Thu, 01 Jan 2025 00:00:00 GMT',
+          etag: '"some-etag"',
+          data: { login: 'testuser' },
+        });
+
+        const client = createRestClient({
+          token: 'test-token',
+          baseUrl,
+          logger: mockServices.logger.mock(),
+          cache,
+        });
+
+        await client.request('GET /users/{username}', { username: 'testuser' });
+
+        expect(receivedHeaders['if-modified-since']).toBe(
+          'Thu, 01 Jan 2025 00:00:00 GMT',
+        );
+        expect(receivedHeaders['if-none-match']).toBeUndefined();
+      });
+
+      it('uses distinct cache keys per user', async () => {
+        server.use(
+          http.get(`${baseUrl}/users/:username`, ({ params }) => {
+            return HttpResponse.json(
+              { login: params.username, suspended_at: null },
+              { headers: { 'Last-Modified': 'Thu, 01 Jan 2025 00:00:00 GMT' } },
+            );
+          }),
+        );
+
+        const cache = createMockCache();
+        const client = createRestClient({
+          token: 'test-token',
+          baseUrl,
+          logger: mockServices.logger.mock(),
+          cache,
+        });
+
+        await client.request('GET /users/{username}', { username: 'user-a' });
+        await client.request('GET /users/{username}', { username: 'user-b' });
+
+        expect(cache.store.has(`GET:${baseUrl}/users/user-a`)).toBe(true);
+        expect(cache.store.has(`GET:${baseUrl}/users/user-b`)).toBe(true);
+      });
+
+      it('works without a cache', async () => {
+        server.use(
+          http.get(`${baseUrl}/users/testuser`, () => {
+            return HttpResponse.json({ login: 'testuser' });
+          }),
+        );
+
+        const client = createRestClient({
+          token: 'test-token',
+          baseUrl,
+          logger: mockServices.logger.mock(),
+        });
+
+        const response = await client.request('GET /users/{username}', {
+          username: 'testuser',
+        });
+
+        expect(response.data).toEqual({ login: 'testuser' });
       });
     });
   });
