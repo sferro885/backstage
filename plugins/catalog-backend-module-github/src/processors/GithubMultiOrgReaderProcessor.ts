@@ -144,7 +144,7 @@ export class GithubMultiOrgReaderProcessor implements CatalogProcessor {
           headers,
         });
         const restClient = createRestClient({
-          token: token!,
+          token: token,
           baseUrl: gitHubConfig.apiBaseUrl!,
           logger: this.logger,
         });

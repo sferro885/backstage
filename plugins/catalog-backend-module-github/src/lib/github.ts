@@ -940,7 +940,7 @@ export const createGraphqlClient = (args: {
 };
 
 export function createRestClient(options: {
-  token: string;
+  token: string | undefined;
   baseUrl: string;
   logger: LoggerService;
   cache?: CacheService;

@@ -162,7 +162,7 @@ export class GithubOrgReaderProcessor implements CatalogProcessor {
     });
 
     const restClient = createRestClient({
-      token: token!,
+      token: token,
       baseUrl: gitHubConfig.apiBaseUrl!,
       logger: this.logger,
     });

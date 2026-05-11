@@ -325,7 +325,7 @@ export class GithubMultiOrgEntityProvider implements EntityProvider {
         headers,
       });
       const restClient = createRestClient({
-        token: token!,
+        token: token,
         baseUrl: this.options.gitHubConfig.apiBaseUrl!,
         logger,
         cache: this.options.cache,
@@ -490,7 +490,7 @@ export class GithubMultiOrgEntityProvider implements EntityProvider {
       headers,
     });
     const restClient = createRestClient({
-      token: token!,
+      token: token,
       baseUrl: this.options.gitHubConfig.apiBaseUrl!,
       logger: this.options.logger,
       cache: this.options.cache,
@@ -734,7 +734,7 @@ export class GithubMultiOrgEntityProvider implements EntityProvider {
       headers,
     });
     const restClient = createRestClient({
-      token: token!,
+      token: token,
       baseUrl: this.options.gitHubConfig.apiBaseUrl!,
       logger: this.options.logger,
       cache: this.options.cache,
