@@ -17,6 +17,7 @@
 import { TestDatabases, mockServices } from '@backstage/backend-test-utils';
 import { Entity } from '@backstage/catalog-model';
 import { applyDatabaseMigrations } from '../database/migrations';
+import { markForStitching } from '../database/operations/stitcher/markForStitching';
 import {
   DbFinalEntitiesRow,
   DbRefreshStateReferencesRow,
@@ -42,11 +43,12 @@ describe('Stitcher', () => {
       const stitcher = new DefaultStitcher({
         knex: db,
         logger,
-        strategy: { mode: 'immediate' },
+        strategy: {
+          pollingInterval: { milliseconds: 50 },
+          stitchTimeout: { seconds: 10 },
+        },
         metrics: metricsServiceMock.mock(),
       });
-      let entities: DbFinalEntitiesRow[];
-      let entity: Entity;
 
       await db<DbRefreshStateRow>('refresh_state').insert([
         {
@@ -88,12 +90,21 @@ describe('Stitcher', () => {
         },
       ]);
 
-      await stitcher.stitch({ entityRefs: ['k:ns/n'] });
+      await markForStitching({ knex: db, entityRefs: ['k:ns/n'] });
+      await stitcher.start();
 
-      entities = await db<DbFinalEntitiesRow>('final_entities');
+      // Wait for stitching to complete
+      await waitForCondition(async () => {
+        const entities = await db<DbFinalEntitiesRow>('final_entities');
+        return entities.length === 1 && entities[0].final_entity !== null;
+      });
+
+      await stitcher.stop();
+
+      let entities = await db<DbFinalEntitiesRow>('final_entities');
 
       expect(entities.length).toBe(1);
-      entity = JSON.parse(entities[0].final_entity!);
+      let entity: Entity = JSON.parse(entities[0].final_entity!);
       expect(entity).toEqual({
         relations: [
           {
@@ -168,7 +179,15 @@ describe('Stitcher', () => {
       );
 
       // Re-stitch without any changes
-      await stitcher.stitch({ entityRefs: ['k:ns/n'] });
+      await markForStitching({ knex: db, entityRefs: ['k:ns/n'] });
+      await stitcher.start();
+
+      await waitForCondition(async () => {
+        const queue = await db('stitch_queue').select('*');
+        return queue.length === 0;
+      });
+
+      await stitcher.stop();
 
       entities = await db<DbFinalEntitiesRow>('final_entities');
       expect(entities.length).toBe(1);
@@ -186,7 +205,15 @@ describe('Stitcher', () => {
         },
       ]);
 
-      await stitcher.stitch({ entityRefs: ['k:ns/n'] });
+      await markForStitching({ knex: db, entityRefs: ['k:ns/n'] });
+      await stitcher.start();
+
+      await waitForCondition(async () => {
+        const e = await db<DbFinalEntitiesRow>('final_entities');
+        return e.length === 1 && e[0].hash !== firstHash;
+      });
+
+      await stitcher.stop();
 
       entities = await db<DbFinalEntitiesRow>('final_entities');
 
@@ -274,3 +301,18 @@ describe('Stitcher', () => {
     },
   );
 });
+
+async function waitForCondition(
+  condition: () => Promise<boolean>,
+  timeoutMs = 10_000,
+  intervalMs = 50,
+) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (await condition()) {
+      return;
+    }
+    await new Promise(resolve => setTimeout(resolve, intervalMs));
+  }
+  throw new Error('Timed out waiting for condition');
+}

@@ -34,7 +34,6 @@ import {
   DbRefreshStateRow,
   DbSearchRow,
 } from '../database/tables';
-import { Stitcher } from '../stitching/types';
 import { DefaultEntitiesCatalog } from './DefaultEntitiesCatalog';
 import { EntitiesRequest } from '../catalog/types';
 import { buildEntitySearch } from '../database/operations/stitcher/buildEntitySearch';
@@ -50,9 +49,6 @@ describe('DefaultEntitiesCatalog', () => {
   });
 
   const databases = TestDatabases.create();
-  const stitch = jest.fn();
-  const stitcher: Stitcher = { stitch } as any;
-
   async function createDatabase(databaseId: TestDatabaseId) {
     knex = await databases.init(databaseId);
     await applyDatabaseMigrations(knex);
@@ -165,7 +161,6 @@ describe('DefaultEntitiesCatalog', () => {
         const catalog = new DefaultEntitiesCatalog({
           database: knex,
           logger: mockServices.logger.mock(),
-          stitcher,
         });
         const result = await catalog.entityAncestry('k:default/root');
         expect(result.rootEntityRef).toEqual('k:default/root');
@@ -198,7 +193,6 @@ describe('DefaultEntitiesCatalog', () => {
         const catalog = new DefaultEntitiesCatalog({
           database: knex,
           logger: mockServices.logger.mock(),
-          stitcher,
         });
         await expect(() =>
           catalog.entityAncestry('k:default/root'),
@@ -244,7 +238,6 @@ describe('DefaultEntitiesCatalog', () => {
         const catalog = new DefaultEntitiesCatalog({
           database: knex,
           logger: mockServices.logger.mock(),
-          stitcher,
         });
         const result = await catalog.entityAncestry('k:default/root');
         expect(result.rootEntityRef).toEqual('k:default/root');
@@ -303,7 +296,6 @@ describe('DefaultEntitiesCatalog', () => {
         const catalog = new DefaultEntitiesCatalog({
           database: knex,
           logger: mockServices.logger.mock(),
-          stitcher,
         });
 
         const testFilter = {
@@ -343,7 +335,6 @@ describe('DefaultEntitiesCatalog', () => {
         const catalog = new DefaultEntitiesCatalog({
           database: knex,
           logger: mockServices.logger.mock(),
-          stitcher,
         });
 
         const testFilter = {
@@ -397,7 +388,6 @@ describe('DefaultEntitiesCatalog', () => {
         const catalog = new DefaultEntitiesCatalog({
           database: knex,
           logger: mockServices.logger.mock(),
-          stitcher,
         });
 
         const testFilter1 = {
@@ -457,7 +447,6 @@ describe('DefaultEntitiesCatalog', () => {
         const catalog = new DefaultEntitiesCatalog({
           database: knex,
           logger: mockServices.logger.mock(),
-          stitcher,
         });
 
         const testFilter1 = {
@@ -505,7 +494,6 @@ describe('DefaultEntitiesCatalog', () => {
         const catalog = new DefaultEntitiesCatalog({
           database: knex,
           logger: mockServices.logger.mock(),
-          stitcher,
         });
 
         const testFilter = {
@@ -554,7 +542,7 @@ describe('DefaultEntitiesCatalog', () => {
         const catalog = new DefaultEntitiesCatalog({
           database: knex,
           logger: mockServices.logger.mock(),
-          stitcher,
+
           enableRelationsCompatibility: true,
         });
 
@@ -612,7 +600,6 @@ describe('DefaultEntitiesCatalog', () => {
         const catalog = new DefaultEntitiesCatalog({
           database: knex,
           logger: mockServices.logger.mock(),
-          stitcher,
         });
 
         function f(
@@ -678,7 +665,6 @@ describe('DefaultEntitiesCatalog', () => {
         const catalog = new DefaultEntitiesCatalog({
           database: knex,
           logger: mockServices.logger.mock(),
-          stitcher,
         });
 
         function f(
@@ -773,7 +759,6 @@ describe('DefaultEntitiesCatalog', () => {
         const catalog = new DefaultEntitiesCatalog({
           database: knex,
           logger: mockServices.logger.mock(),
-          stitcher,
         });
 
         const res = await catalog.entitiesBatch({
@@ -829,7 +814,6 @@ describe('DefaultEntitiesCatalog', () => {
         const catalog = new DefaultEntitiesCatalog({
           database: knex,
           logger: mockServices.logger.mock(),
-          stitcher,
         });
 
         const res = await catalog.entitiesBatch({
@@ -878,7 +862,6 @@ describe('DefaultEntitiesCatalog', () => {
         const catalog = new DefaultEntitiesCatalog({
           database: knex,
           logger: mockServices.logger.mock(),
-          stitcher,
         });
 
         const filter = {
@@ -1055,7 +1038,6 @@ describe('DefaultEntitiesCatalog', () => {
         const catalog = new DefaultEntitiesCatalog({
           database: knex,
           logger: mockServices.logger.mock(),
-          stitcher,
         });
 
         const filter = {
@@ -1233,7 +1215,6 @@ describe('DefaultEntitiesCatalog', () => {
         const catalog = new DefaultEntitiesCatalog({
           database: knex,
           logger: mockServices.logger.mock(),
-          stitcher,
         });
 
         const filter = {
@@ -1293,7 +1274,6 @@ describe('DefaultEntitiesCatalog', () => {
         const catalog = new DefaultEntitiesCatalog({
           database: knex,
           logger: mockServices.logger.mock(),
-          stitcher,
         });
 
         const request: QueryEntitiesInitialRequest = {
@@ -1347,7 +1327,6 @@ describe('DefaultEntitiesCatalog', () => {
         const catalog = new DefaultEntitiesCatalog({
           database: knex,
           logger: mockServices.logger.mock(),
-          stitcher,
         });
 
         const filter = {
@@ -1446,7 +1425,6 @@ describe('DefaultEntitiesCatalog', () => {
         const catalog = new DefaultEntitiesCatalog({
           database: knex,
           logger: mockServices.logger.mock(),
-          stitcher,
         });
 
         const filter = {
@@ -1526,7 +1504,6 @@ describe('DefaultEntitiesCatalog', () => {
         const catalog = new DefaultEntitiesCatalog({
           database: knex,
           logger: mockServices.logger.mock(),
-          stitcher,
         });
 
         const request: QueryEntitiesInitialRequest = {
@@ -1562,7 +1539,6 @@ describe('DefaultEntitiesCatalog', () => {
         const catalog = new DefaultEntitiesCatalog({
           database: knex,
           logger: mockServices.logger.mock(),
-          stitcher,
         });
 
         const request: QueryEntitiesInitialRequest = {
@@ -1613,7 +1589,6 @@ describe('DefaultEntitiesCatalog', () => {
         const catalog = new DefaultEntitiesCatalog({
           database: knex,
           logger: mockServices.logger.mock(),
-          stitcher,
         });
 
         const limit = 2;
@@ -1737,7 +1712,6 @@ describe('DefaultEntitiesCatalog', () => {
         const catalog = new DefaultEntitiesCatalog({
           database: knex,
           logger: mockServices.logger.mock(),
-          stitcher,
         });
 
         const limit = 2;
@@ -1801,7 +1775,6 @@ describe('DefaultEntitiesCatalog', () => {
         const catalog = new DefaultEntitiesCatalog({
           database: knex,
           logger: mockServices.logger.mock(),
-          stitcher,
         });
 
         const limit = 2;
@@ -1896,7 +1869,6 @@ describe('DefaultEntitiesCatalog', () => {
         const catalog = new DefaultEntitiesCatalog({
           database: knex,
           logger: mockServices.logger.mock(),
-          stitcher,
         });
 
         await expect(
@@ -1938,7 +1910,6 @@ describe('DefaultEntitiesCatalog', () => {
         const catalog = new DefaultEntitiesCatalog({
           database: knex,
           logger: mockServices.logger.mock(),
-          stitcher,
         });
 
         await expect(
@@ -2033,7 +2004,6 @@ describe('DefaultEntitiesCatalog', () => {
         const catalog = new DefaultEntitiesCatalog({
           database: knex,
           logger: mockServices.logger.mock(),
-          stitcher,
         });
 
         // Query with orderField
@@ -2067,7 +2037,6 @@ describe('DefaultEntitiesCatalog', () => {
         const catalog = new DefaultEntitiesCatalog({
           database: knex,
           logger: mockServices.logger.mock(),
-          stitcher,
         });
 
         // Use filter to restrict to kind=component, and query to restrict to name=A
@@ -2155,7 +2124,6 @@ describe('DefaultEntitiesCatalog', () => {
         const catalog = new DefaultEntitiesCatalog({
           database: knex,
           logger: mockServices.logger.mock(),
-          stitcher,
         });
         await catalog.removeEntityByUid(uid);
 
@@ -2171,9 +2139,13 @@ describe('DefaultEntitiesCatalog', () => {
           { entity_ref: 'k:default/unrelated1', result_hash: 'not-changed' },
           { entity_ref: 'k:default/unrelated2', result_hash: 'not-changed' },
         ]);
-        expect(stitch).toHaveBeenCalledWith({
-          entityRefs: new Set(['k:default/unrelated1', 'k:default/unrelated2']),
-        });
+        const stitchQueue = await knex('stitch_queue')
+          .select('entity_ref')
+          .orderBy('entity_ref');
+        expect(stitchQueue.map(r => r.entity_ref)).toEqual([
+          'k:default/unrelated1',
+          'k:default/unrelated2',
+        ]);
       },
     );
   });
@@ -2205,7 +2177,6 @@ describe('DefaultEntitiesCatalog', () => {
         const catalog = new DefaultEntitiesCatalog({
           database: knex,
           logger: mockServices.logger.mock(),
-          stitcher,
         });
 
         await expect(
@@ -2279,7 +2250,6 @@ describe('DefaultEntitiesCatalog', () => {
         const catalog = new DefaultEntitiesCatalog({
           database: knex,
           logger: mockServices.logger.mock(),
-          stitcher,
         });
 
         await expect(
@@ -2328,7 +2298,6 @@ describe('DefaultEntitiesCatalog', () => {
         const catalog = new DefaultEntitiesCatalog({
           database: knex,
           logger: mockServices.logger.mock(),
-          stitcher,
         });
 
         await expect(
@@ -2372,7 +2341,6 @@ describe('DefaultEntitiesCatalog', () => {
         const catalog = new DefaultEntitiesCatalog({
           database: knex,
           logger: mockServices.logger.mock(),
-          stitcher,
         });
 
         await expect(
@@ -2420,7 +2388,6 @@ describe('DefaultEntitiesCatalog', () => {
         const catalog = new DefaultEntitiesCatalog({
           database: knex,
           logger: mockServices.logger.mock(),
-          stitcher,
         });
 
         await expect(
@@ -2447,7 +2414,6 @@ describe('DefaultEntitiesCatalog', () => {
       return new DefaultEntitiesCatalog({
         database: knex,
         logger: mockServices.logger.mock(),
-        stitcher,
       });
     }
 
@@ -2497,7 +2463,6 @@ describe('DefaultEntitiesCatalog', () => {
         const catalog = new DefaultEntitiesCatalog({
           database: knex,
           logger: mockServices.logger.mock(),
-          stitcher,
         });
 
         // With filter: unstitched entity should be excluded because the

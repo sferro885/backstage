@@ -33,9 +33,8 @@ describe('performStitching', () => {
   const databases = TestDatabases.create();
   const logger = mockServices.logger.mock();
 
-  // NOTE(freben): Testing the deferred path since it's a superset of the immediate one
   it.each(databases.eachSupportedId())(
-    'runs the happy path in deferred mode for %p',
+    'runs the happy path for %p',
     async databaseId => {
       const knex = await databases.init(databaseId);
       await applyDatabaseMigrations(knex);
@@ -83,22 +82,14 @@ describe('performStitching', () => {
         },
       ]);
 
-      const deferredStrategy = {
-        mode: 'deferred' as const,
-        pollingInterval: { seconds: 1 },
-        stitchTimeout: { seconds: 1 },
-      };
-
       await markForStitching({
         knex,
-        strategy: deferredStrategy,
         entityRefs: ['k:ns/n'],
       });
 
       await performStitching({
         knex,
         logger,
-        strategy: deferredStrategy,
         entityRef: 'k:ns/n',
         stitchTicket: (
           await knex('stitch_queue')
@@ -188,14 +179,12 @@ describe('performStitching', () => {
       // Re-stitch without any changes
       await markForStitching({
         knex,
-        strategy: deferredStrategy,
         entityRefs: ['k:ns/n'],
       });
 
       await performStitching({
         knex,
         logger,
-        strategy: deferredStrategy,
         entityRef: 'k:ns/n',
         stitchTicket: (
           await knex('stitch_queue')
@@ -223,14 +212,12 @@ describe('performStitching', () => {
 
       await markForStitching({
         knex,
-        strategy: deferredStrategy,
         entityRefs: ['k:ns/n'],
       });
 
       await performStitching({
         knex,
         logger,
-        strategy: deferredStrategy,
         entityRef: 'k:ns/n',
         stitchTicket: (
           await knex('stitch_queue')
@@ -382,7 +369,6 @@ describe('performStitching', () => {
         performStitching({
           knex,
           logger: stitchLogger,
-          strategy: { mode: 'immediate' },
           entityRef: 'k:ns/n',
         }),
       ).resolves.toBe('abandoned');
@@ -435,7 +421,6 @@ describe('performStitching', () => {
         performStitching({
           knex,
           logger: stitchLogger,
-          strategy: { mode: 'immediate' },
           entityRef: 'k:ns/n',
         }),
       ).resolves.toBe('changed');

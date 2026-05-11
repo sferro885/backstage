@@ -17,11 +17,7 @@
 import { TestDatabases } from '@backstage/backend-test-utils';
 import { applyDatabaseMigrations } from '../../migrations';
 import { markForStitching } from './markForStitching';
-import {
-  DbFinalEntitiesRow,
-  DbRefreshStateRow,
-  DbStitchQueueRow,
-} from '../../tables';
+import { DbRefreshStateRow, DbStitchQueueRow } from '../../tables';
 
 jest.setTimeout(60_000);
 
@@ -29,7 +25,7 @@ describe('markForStitching', () => {
   const databases = TestDatabases.create();
 
   it.each(databases.eachSupportedId())(
-    'marks the right rows in deferred mode %p',
+    'marks the right rows %p',
     async databaseId => {
       const knex = await databases.init(databaseId);
       await applyDatabaseMigrations(knex);
@@ -100,11 +96,6 @@ describe('markForStitching', () => {
       // Calling with empty set should not create any new rows
       await markForStitching({
         knex,
-        strategy: {
-          mode: 'deferred',
-          pollingInterval: { seconds: 1 },
-          stitchTimeout: { seconds: 1 },
-        },
         entityRefs: new Set(),
       });
       await expect(result()).resolves.toEqual([
@@ -118,11 +109,6 @@ describe('markForStitching', () => {
       // Mark entity 1 - should create a new stitch_queue row
       await markForStitching({
         knex,
-        strategy: {
-          mode: 'deferred',
-          pollingInterval: { seconds: 1 },
-          stitchTimeout: { seconds: 1 },
-        },
         entityRefs: new Set(['k:ns/one']),
       });
       await expect(result()).resolves.toEqual([
@@ -141,11 +127,6 @@ describe('markForStitching', () => {
       // Mark entity 2 - should create another new stitch_queue row
       await markForStitching({
         knex,
-        strategy: {
-          mode: 'deferred',
-          pollingInterval: { seconds: 1 },
-          stitchTimeout: { seconds: 1 },
-        },
         entityRefs: ['k:ns/two'],
       });
       await expect(result()).resolves.toEqual([
@@ -169,11 +150,6 @@ describe('markForStitching', () => {
       // Mark entities 3 and 4 by ID - entity 3 creates new row, entity 4 updates existing
       await markForStitching({
         knex,
-        strategy: {
-          mode: 'deferred',
-          pollingInterval: { seconds: 1 },
-          stitchTimeout: { seconds: 1 },
-        },
         entityIds: ['3', '4'],
       });
       await expect(result()).resolves.toEqual([
@@ -203,238 +179,6 @@ describe('markForStitching', () => {
       const final = await result();
       const entity4Final = final.find(r => r.entity_ref === 'k:ns/four');
       expect(entity4Final?.stitch_ticket).not.toEqual('old');
-    },
-  );
-
-  it.each(databases.eachSupportedId())(
-    'marks the right rows in immediate mode %p',
-    async databaseId => {
-      const knex = await databases.init(databaseId);
-      await applyDatabaseMigrations(knex);
-
-      await knex<DbRefreshStateRow>('refresh_state').insert([
-        {
-          entity_id: '1',
-          entity_ref: 'k:ns/one',
-          unprocessed_entity: '{}',
-          processed_entity: '{}',
-          result_hash: 'old',
-          errors: '[]',
-          next_update_at: knex.fn.now(),
-          last_discovery_at: knex.fn.now(),
-        },
-        {
-          entity_id: '2',
-          entity_ref: 'k:ns/two',
-          unprocessed_entity: '{}',
-          processed_entity: '{}',
-          result_hash: 'old',
-          errors: '[]',
-          next_update_at: knex.fn.now(),
-          last_discovery_at: knex.fn.now(),
-        },
-        {
-          entity_id: '3',
-          entity_ref: 'k:ns/three',
-          unprocessed_entity: '{}',
-          processed_entity: '{}',
-          result_hash: 'old',
-          errors: '[]',
-          next_update_at: knex.fn.now(),
-          last_discovery_at: knex.fn.now(),
-        },
-        {
-          entity_id: '4',
-          entity_ref: 'k:ns/four',
-          unprocessed_entity: '{}',
-          processed_entity: '{}',
-          result_hash: 'old',
-          errors: '[]',
-          next_update_at: knex.fn.now(),
-          last_discovery_at: knex.fn.now(),
-        },
-      ]);
-      await knex<DbFinalEntitiesRow>('final_entities').insert([
-        {
-          entity_id: '1',
-          final_entity: '{}',
-          entity_ref: 'k:ns/one',
-          hash: 'old',
-        },
-        {
-          entity_id: '2',
-          final_entity: '{}',
-          entity_ref: 'k:ns/two',
-          hash: 'old',
-        },
-        {
-          entity_id: '3',
-          final_entity: '{}',
-          entity_ref: 'k:ns/three',
-          hash: 'old',
-        },
-        {
-          entity_id: '4',
-          final_entity: '{}',
-          entity_ref: 'k:ns/four',
-          hash: 'old',
-        },
-      ]);
-
-      async function result() {
-        return knex<DbRefreshStateRow>('refresh_state')
-          .leftJoin(
-            'final_entities',
-            'final_entities.entity_id',
-            'refresh_state.entity_id',
-          )
-          .select({
-            entity_id: 'refresh_state.entity_id',
-            next_update_at: 'refresh_state.next_update_at',
-            refresh_state_hash: 'refresh_state.result_hash',
-            final_entities_hash: 'final_entities.hash',
-          })
-          .orderBy('entity_id', 'asc');
-      }
-
-      // Ensure that now() isn't evaluating to the same thing
-      await new Promise(resolve => setTimeout(resolve, 1100));
-
-      const original = await result();
-
-      await markForStitching({
-        knex,
-        strategy: { mode: 'immediate' },
-        entityRefs: new Set(),
-      });
-      await expect(result()).resolves.toEqual([
-        {
-          entity_id: '1',
-          next_update_at: expect.anything(),
-          refresh_state_hash: 'old',
-          final_entities_hash: 'old',
-        },
-        {
-          entity_id: '2',
-          next_update_at: expect.anything(),
-          refresh_state_hash: 'old',
-          final_entities_hash: 'old',
-        },
-        {
-          entity_id: '3',
-          next_update_at: expect.anything(),
-          refresh_state_hash: 'old',
-          final_entities_hash: 'old',
-        },
-        {
-          entity_id: '4',
-          next_update_at: expect.anything(),
-          refresh_state_hash: 'old',
-          final_entities_hash: 'old',
-        },
-      ]);
-
-      await markForStitching({
-        knex,
-        strategy: { mode: 'immediate' },
-        entityRefs: new Set(['k:ns/one']),
-      });
-      await expect(result()).resolves.toEqual([
-        {
-          entity_id: '1',
-          next_update_at: expect.anything(),
-          refresh_state_hash: 'force-stitching',
-          final_entities_hash: 'force-stitching',
-        },
-        {
-          entity_id: '2',
-          next_update_at: expect.anything(),
-          refresh_state_hash: 'old',
-          final_entities_hash: 'old',
-        },
-        {
-          entity_id: '3',
-          next_update_at: expect.anything(),
-          refresh_state_hash: 'old',
-          final_entities_hash: 'old',
-        },
-        {
-          entity_id: '4',
-          next_update_at: expect.anything(),
-          refresh_state_hash: 'old',
-          final_entities_hash: 'old',
-        },
-      ]);
-
-      await markForStitching({
-        knex,
-        strategy: { mode: 'immediate' },
-        entityRefs: ['k:ns/two'],
-      });
-      await expect(result()).resolves.toEqual([
-        {
-          entity_id: '1',
-          next_update_at: expect.anything(),
-          refresh_state_hash: 'force-stitching',
-          final_entities_hash: 'force-stitching',
-        },
-        {
-          entity_id: '2',
-          next_update_at: expect.anything(),
-          refresh_state_hash: 'force-stitching',
-          final_entities_hash: 'force-stitching',
-        },
-        {
-          entity_id: '3',
-          next_update_at: expect.anything(),
-          refresh_state_hash: 'old',
-          final_entities_hash: 'old',
-        },
-        {
-          entity_id: '4',
-          next_update_at: expect.anything(),
-          refresh_state_hash: 'old',
-          final_entities_hash: 'old',
-        },
-      ]);
-
-      await markForStitching({
-        knex,
-        strategy: { mode: 'immediate' },
-        entityIds: ['3', '4'],
-      });
-      await expect(result()).resolves.toEqual([
-        {
-          entity_id: '1',
-          next_update_at: expect.anything(),
-          refresh_state_hash: 'force-stitching',
-          final_entities_hash: 'force-stitching',
-        },
-        {
-          entity_id: '2',
-          next_update_at: expect.anything(),
-          refresh_state_hash: 'force-stitching',
-          final_entities_hash: 'force-stitching',
-        },
-        {
-          entity_id: '3',
-          next_update_at: expect.anything(),
-          refresh_state_hash: 'force-stitching',
-          final_entities_hash: 'force-stitching',
-        },
-        {
-          entity_id: '4',
-          next_update_at: expect.anything(),
-          refresh_state_hash: 'force-stitching',
-          final_entities_hash: 'force-stitching',
-        },
-      ]);
-
-      // It overwrites timers
-      const final = await result();
-      for (let i = 0; i < final.length; ++i) {
-        expect(original[i].next_update_at).not.toEqual(final[i].next_update_at);
-      }
     },
   );
 
@@ -475,11 +219,6 @@ describe('markForStitching', () => {
         const transaction1 = knex.transaction(async trx => {
           await markForStitching({
             knex: trx,
-            strategy: {
-              mode: 'deferred',
-              pollingInterval: { seconds: 1 },
-              stitchTimeout: { seconds: 1 },
-            },
             entityRefs: [
               'k:ns/entity-a',
               'k:ns/entity-b',
@@ -494,11 +233,6 @@ describe('markForStitching', () => {
 
           await markForStitching({
             knex: trx,
-            strategy: {
-              mode: 'deferred',
-              pollingInterval: { seconds: 1 },
-              stitchTimeout: { seconds: 1 },
-            },
             entityRefs: ['k:ns/entity-f'],
           });
         });
@@ -507,11 +241,6 @@ describe('markForStitching', () => {
         const transaction2 = knex.transaction(async trx => {
           await markForStitching({
             knex: trx,
-            strategy: {
-              mode: 'deferred',
-              pollingInterval: { seconds: 1 },
-              stitchTimeout: { seconds: 1 },
-            },
             entityRefs: [
               'k:ns/entity-f',
               'k:ns/entity-e',
@@ -526,11 +255,6 @@ describe('markForStitching', () => {
 
           await markForStitching({
             knex: trx,
-            strategy: {
-              mode: 'deferred',
-              pollingInterval: { seconds: 1 },
-              stitchTimeout: { seconds: 1 },
-            },
             entityRefs: ['k:ns/entity-a'],
           });
         });

@@ -23,7 +23,6 @@ import {
 import { AlphaEntity, EntityStatusItem } from '@backstage/catalog-model/alpha';
 import { SerializedError } from '@backstage/errors';
 import { Knex } from 'knex';
-import { StitchingStrategy } from '../../../stitching/types';
 import {
   DbFinalEntitiesRow,
   DbRefreshStateRow,
@@ -51,17 +50,16 @@ const scriptProtocolPattern =
 export async function performStitching(options: {
   knex: Knex | Knex.Transaction;
   logger: LoggerService;
-  strategy: StitchingStrategy;
   entityRef: string;
   stitchTicket?: string;
 }): Promise<'changed' | 'unchanged' | 'abandoned'> {
   const { knex, logger, entityRef } = options;
   const stitchTicket = options.stitchTicket;
 
-  // In deferred mode, the entity is removed from the stitch queue on ANY
-  // completion, except when an exception is thrown. In the latter case, the
-  // entity will be retried at a later time.
-  let removeFromStitchQueueOnCompletion = options.strategy.mode === 'deferred';
+  // The entity is removed from the stitch queue on ANY completion, except when
+  // an exception is thrown. In the latter case, the entity will be retried at a
+  // later time.
+  let removeFromStitchQueueOnCompletion = true;
 
   try {
     const entityResult = await knex<DbRefreshStateRow>('refresh_state')
@@ -238,9 +236,9 @@ export async function performStitching(options: {
       })
       .where('entity_id', entityId);
 
-    // In deferred mode, guard against concurrent stitchers by checking that
-    // the stitch_ticket in stitch_queue still matches what we were given.
-    if (options.strategy.mode === 'deferred' && stitchTicket) {
+    // Guard against concurrent stitchers by checking that the stitch_ticket
+    // in stitch_queue still matches what we were given.
+    if (stitchTicket) {
       updateQuery = updateQuery.whereExists(
         knex<DbStitchQueueRow>('stitch_queue')
           .where('stitch_queue.entity_ref', entityRef)

@@ -41,7 +41,7 @@ import {
   DbRelationsRow,
   DbSearchRow,
 } from '../database/tables';
-import { Stitcher } from '../stitching/types';
+import { markForStitching } from '../database/operations/stitcher/markForStitching';
 
 import {
   expandLegacyCompoundRelationsInEntity,
@@ -102,18 +102,15 @@ function stringifyPagination(
 export class DefaultEntitiesCatalog implements EntitiesCatalog {
   private readonly database: Knex;
   private readonly logger: LoggerService;
-  private readonly stitcher: Stitcher;
   private readonly enableRelationsCompatibility: boolean;
 
   constructor(options: {
     database: Knex;
     logger: LoggerService;
-    stitcher: Stitcher;
     enableRelationsCompatibility?: boolean;
   }) {
     this.database = options.database;
     this.logger = options.logger;
-    this.stitcher = options.stitcher;
     this.enableRelationsCompatibility = Boolean(
       options.enableRelationsCompatibility,
     );
@@ -611,7 +608,8 @@ export class DefaultEntitiesCatalog implements EntitiesCatalog {
     });
 
     if (relationPeerRefs.size > 0) {
-      await this.stitcher.stitch({
+      await markForStitching({
+        knex: this.database,
         entityRefs: relationPeerRefs,
       });
     }
