@@ -50,6 +50,8 @@ export type {
   TracingService,
   TracingServiceAttributeValue,
   TracingServiceAttributes,
+  TracingServiceBaggage,
+  TracingServiceBaggageEntry,
   TracingServiceSpan,
   TracingServiceSpanKind,
   TracingServiceSpanOptions,

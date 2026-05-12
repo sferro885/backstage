@@ -13,7 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
+import {
+  SpanKind,
+  SpanStatusCode,
+  context,
+  propagation,
+  trace,
+} from '@opentelemetry/api';
 import { mockCredentials, mockServices } from '@backstage/backend-test-utils';
 import { DefaultTracingService } from './DefaultTracingService';
 
@@ -266,5 +272,72 @@ describe('DefaultTracingService', () => {
     const value = await service.startActiveSpan('op', () => 42);
     expect(value).toBe(42);
     expect(mocks.span.end).toHaveBeenCalledTimes(1);
+  });
+
+  describe('withPropagatedContext', () => {
+    it('extracts context from headers and runs fn within it', async () => {
+      const extractSpy = jest.spyOn(propagation, 'extract');
+      const withSpy = jest.spyOn(context, 'with');
+
+      const service = createService();
+      const headers = { traceparent: '00-abc-def-01' };
+      const result = await service.withPropagatedContext(headers, () => 42);
+
+      expect(result).toBe(42);
+      expect(extractSpy).toHaveBeenCalledWith(expect.anything(), headers);
+      expect(withSpy).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.any(Function),
+      );
+    });
+
+    it('returns the value from an async fn', async () => {
+      const service = createService();
+      const result = await service.withPropagatedContext(
+        {},
+        async () => 'async-val',
+      );
+      expect(result).toBe('async-val');
+    });
+  });
+
+  describe('getActiveBaggage', () => {
+    it('returns undefined when no baggage is present', () => {
+      jest.spyOn(propagation, 'getActiveBaggage').mockReturnValue(undefined);
+      const service = createService();
+      expect(service.getActiveBaggage()).toBeUndefined();
+    });
+
+    it('returns a read-only baggage wrapping the active context baggage', () => {
+      const mockBaggage = {
+        getEntry: jest.fn((key: string) =>
+          key === 'gen_ai.conversation.id' ? { value: 'conv-1' } : undefined,
+        ),
+        getAllEntries: jest.fn(() => [
+          ['gen_ai.conversation.id', { value: 'conv-1' }],
+          ['gen_ai.agent.id', { value: 'agent-2' }],
+        ]),
+        setEntry: jest.fn(),
+        removeEntry: jest.fn(),
+        removeEntries: jest.fn(),
+        clear: jest.fn(),
+      };
+      jest
+        .spyOn(propagation, 'getActiveBaggage')
+        .mockReturnValue(mockBaggage as any);
+
+      const service = createService();
+      const baggage = service.getActiveBaggage();
+
+      expect(baggage).toBeDefined();
+      expect(baggage!.getEntry('gen_ai.conversation.id')).toEqual({
+        value: 'conv-1',
+      });
+      expect(baggage!.getEntry('unknown')).toBeUndefined();
+      expect(baggage!.getAllEntries()).toEqual([
+        ['gen_ai.conversation.id', { value: 'conv-1' }],
+        ['gen_ai.agent.id', { value: 'agent-2' }],
+      ]);
+    });
   });
 });

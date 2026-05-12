@@ -14,7 +14,14 @@
  * limitations under the License.
  */
 
-import { SpanKind, SpanStatusCode, Tracer, trace } from '@opentelemetry/api';
+import {
+  SpanKind,
+  SpanStatusCode,
+  Tracer,
+  context,
+  propagation,
+  trace,
+} from '@opentelemetry/api';
 import {
   BackstageCredentials,
   HttpAuthService,
@@ -115,6 +122,29 @@ export class DefaultTracingService implements TracingService {
         }
       },
     );
+  }
+
+  async withPropagatedContext<T>(
+    headers: Record<string, string | string[] | undefined>,
+    fn: () => T | Promise<T>,
+  ): Promise<T> {
+    const otelCtx = propagation.extract(context.active(), headers);
+    return context.with(otelCtx, fn);
+  }
+
+  getActiveBaggage() {
+    const baggage = propagation.getActiveBaggage();
+    if (!baggage) return undefined;
+    return {
+      getEntry: (key: string) => {
+        const entry = baggage.getEntry(key);
+        return entry ? { value: entry.value } : undefined;
+      },
+      getAllEntries: (): Array<[string, { value: string }]> =>
+        baggage
+          .getAllEntries()
+          .map(([key, entry]) => [key, { value: entry.value }]),
+    };
   }
 
   private getPrincipalAttributes(

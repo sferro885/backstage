@@ -100,6 +100,41 @@ The span object exposes:
 | `setAttribute(key, value)`     | Set a single attribute. Value is a primitive or array of primitives. |
 | `setStatus({ code, message })` | Set the span status. `code` is `'ok'`, `'error'`, or `'unset'`.      |
 
+## Context Propagation
+
+When your plugin receives requests through a protocol layer that breaks automatic OpenTelemetry context propagation (e.g. a WebSocket handler), use `withPropagatedContext` to extract the trace parent and baggage from the incoming HTTP headers and run the handler within that context:
+
+```ts
+router.post('/', async (req, res) => {
+  await tracing.withPropagatedContext(req.headers, () =>
+    transport.handleRequest(req, res, req.body),
+  );
+});
+```
+
+Any spans created inside the callback — including those from `startActiveSpan` — will be children of the propagated trace and will have access to the propagated baggage.
+
+## Reading Baggage
+
+Use `getActiveBaggage()` to read baggage entries from the active context. This is useful for forwarding caller-set metadata onto your spans — for example, a request ID, tenant identifier, or feature-flag context that the caller propagated via baggage:
+
+```ts
+const baggage = tracing.getActiveBaggage();
+const tenantId = baggage?.getEntry('app.tenant.id')?.value;
+if (tenantId) {
+  span.setAttribute('app.tenant.id', tenantId);
+}
+```
+
+The returned object exposes:
+
+| Method            | Description                                              |
+| ----------------- | -------------------------------------------------------- |
+| `getEntry(key)`   | Returns `{ value: string }` for the key, or `undefined`. |
+| `getAllEntries()` | Returns all entries as `[key, { value }][]`.             |
+
+Returns `undefined` when no baggage is present in the active context.
+
 ## Principal Enrichment
 
 When you supply either `credentials` or a `request`, the service adds principal-derived attributes to the span:

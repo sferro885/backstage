@@ -46,6 +46,10 @@ export interface MockedTracingServiceSpan extends TracingServiceSpan {
  */
 export interface TracingServiceMock extends TracingService {
   startActiveSpan: jest.MockedFunction<TracingService['startActiveSpan']>;
+  withPropagatedContext: jest.MockedFunction<
+    TracingService['withPropagatedContext']
+  >;
+  getActiveBaggage: jest.MockedFunction<TracingService['getActiveBaggage']>;
   /** Spans created by `startActiveSpan` calls, in order. */
   spans: MockedTracingServiceSpan[];
   factory: ServiceFactory<TracingService>;
@@ -75,7 +79,18 @@ export namespace tracingServiceMock {
       return await fn(span);
     }) as TracingServiceMock['startActiveSpan'];
 
-    const service: TracingService = { startActiveSpan };
+    const withPropagatedContext = jest.fn(async (_headers, fn) =>
+      fn(),
+    ) as TracingServiceMock['withPropagatedContext'];
+    const getActiveBaggage = jest.fn(
+      () => undefined,
+    ) as TracingServiceMock['getActiveBaggage'];
+
+    const service: TracingService = {
+      startActiveSpan,
+      withPropagatedContext,
+      getActiveBaggage,
+    };
 
     return Object.assign(service as TracingServiceMock, {
       spans,

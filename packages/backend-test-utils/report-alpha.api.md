@@ -108,9 +108,15 @@ export type ServiceMock<TService> = {
 export interface TracingServiceMock extends TracingService {
   // (undocumented)
   factory: ServiceFactory<TracingService>;
+  // (undocumented)
+  getActiveBaggage: jest.MockedFunction<TracingService['getActiveBaggage']>;
   spans: MockedTracingServiceSpan[];
   // (undocumented)
   startActiveSpan: jest.MockedFunction<TracingService['startActiveSpan']>;
+  // (undocumented)
+  withPropagatedContext: jest.MockedFunction<
+    TracingService['withPropagatedContext']
+  >;
 }
 
 // @alpha (undocumented)

@@ -106,4 +106,39 @@ export interface TracingService {
     fn: (span: TracingServiceSpan) => T | Promise<T>,
     options?: TracingServiceSpanOptions,
   ): Promise<T>;
+
+  /**
+   * Extracts propagated context from HTTP headers and runs `fn` within
+   * it. Use this to bridge context across async boundaries where
+   * automatic propagation is lost.
+   */
+  withPropagatedContext<T>(
+    headers: Record<string, string | string[] | undefined>,
+    fn: () => T | Promise<T>,
+  ): Promise<T>;
+
+  /**
+   * Returns the active baggage from the current context, or `undefined`
+   * when none is present.
+   */
+  getActiveBaggage(): TracingServiceBaggage | undefined;
+}
+
+/**
+ * A read-only view of propagated baggage entries.
+ *
+ * @alpha
+ */
+export interface TracingServiceBaggage {
+  getEntry(key: string): TracingServiceBaggageEntry | undefined;
+  getAllEntries(): Array<[string, TracingServiceBaggageEntry]>;
+}
+
+/**
+ * A single baggage entry.
+ *
+ * @alpha
+ */
+export interface TracingServiceBaggageEntry {
+  value: string;
 }

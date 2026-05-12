@@ -71,7 +71,7 @@ export const metricsServiceRef = createServiceRef<
 /**
  * Service for managing trace spans.
  *
- * See {@link TracingService} for the API surface.
+ * See `TracingService` for the API surface.
  *
  * @alpha
  */
