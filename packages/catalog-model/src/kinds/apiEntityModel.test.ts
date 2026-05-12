@@ -34,14 +34,8 @@ describe('apiEntityModel v1alpha2 dispatch', () => {
 
     expect(mcp).toBeDefined();
     expect(openapi).toBeDefined();
-
-    // The mcp-server specType entry has a distinct description; the default
-    // entry falls back to the kind-level description. If these are equal,
-    // dispatch is broken.
     expect(mcp!.description).not.toBe(openapi!.description);
 
-    // The mcp-server schema requires spec.remotes; the default schema requires
-    // spec.definition. Inspect the compiled JSON Schema directly.
     const mcpSpecRequired = (mcp!.jsonSchema.properties as any).spec
       .required as string[];
     const openapiSpecRequired = (openapi!.jsonSchema.properties as any).spec
