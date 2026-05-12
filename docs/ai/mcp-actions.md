@@ -295,9 +295,15 @@ See the [OpenTelemetry tutorial](../tutorials/setup-opentelemetry.md) to learn h
 
 ## Tracing
 
-The MCP Actions Backend emits a trace span for each `tools/call` invocation via the [Tracing Service](../backend-system/core-services/tracing.md), following the [OpenTelemetry server-side MCP semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/mcp/#server). Each span uses the name `tools/call <toolname>`, server kind, and includes the standard MCP attributes (`mcp.method.name`, `gen_ai.tool.name`, `gen_ai.operation.name`). When a tool result returns `isError: true`, the span is marked with `error.type=tool_error`; thrown handler errors are recorded and the span status is set to `ERROR`.
+The MCP Actions Backend emits a trace span for each `tools/call` invocation via the [Tracing Service](../backend-system/core-services/tracing.md), following the [OpenTelemetry server-side MCP semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/mcp/#server). Each span uses the name `tools/call <toolname>`, server kind, and includes the standard MCP attributes (`mcp.method.name`, `gen_ai.tool.name`, `gen_ai.operation.name`). Known Backstage errors (such as `InputError` or `NotFoundError`) are caught and returned as `isError: true` tool responses — the span is marked with `error.type=tool_error` in that case. Unhandled exceptions are recorded automatically by the Tracing Service and the span status is set to `ERROR`.
 
 In addition to those attributes, the Tracing Service automatically attaches the authenticated principal's type as `backstage.principal.type` (one of `user`, `service`, or `none`). Each `tools/call` span is also attributed to the plugin that owns the invoked action via `backstage.plugin.id` (e.g. `catalog`, `scaffolder`) — overriding the default `mcp-actions` value so tracing backends can filter activity by the source plugin rather than by the MCP transport.
+
+### Baggage propagation
+
+The MCP Actions routers propagate OpenTelemetry context from the incoming HTTP request headers so that trace parent and baggage survive through the MCP transport layer. Any `gen_ai.*` baggage entries set by the MCP client (such as `gen_ai.conversation.id` or `gen_ai.agent.id`) are automatically included as attributes on the `tools/call` span. This enables tracing backends to correlate MCP tool invocations back to the originating conversation or agent without additional configuration.
+
+Explicit span attributes (like `gen_ai.tool.name`) always take precedence over baggage entries with the same key, so client-injected baggage cannot override spec-required values.
 
 ### Capturing the authenticated end user
 

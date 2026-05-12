@@ -89,6 +89,7 @@ export const mcpPlugin = createBackendPlugin({
               httpAuth,
               logger,
               metrics,
+              tracing,
               serverConfig,
             });
 
@@ -105,6 +106,7 @@ export const mcpPlugin = createBackendPlugin({
           const sseRouter = createSseRouter({
             mcpService,
             httpAuth,
+            tracing,
             serverConfig,
           });
 
@@ -113,6 +115,7 @@ export const mcpPlugin = createBackendPlugin({
             httpAuth,
             logger,
             metrics,
+            tracing,
             serverConfig,
           });
 

@@ -1010,6 +1010,57 @@ describe('McpService', () => {
       );
     });
 
+    it('includes gen_ai baggage entries as span attributes when present', async () => {
+      const tracing = tracingServiceMock.mock();
+      tracing.getActiveBaggage.mockReturnValue({
+        getEntry: (key: string) => {
+          const entries: Record<string, { value: string }> = {
+            'gen_ai.conversation.id': { value: 'conv-123' },
+            'gen_ai.agent.id': { value: 'agent-456' },
+          };
+          return entries[key];
+        },
+        getAllEntries: () => [
+          ['gen_ai.conversation.id', { value: 'conv-123' }],
+          ['gen_ai.agent.id', { value: 'agent-456' }],
+        ],
+      });
+
+      await invokeMockAction({ tracing });
+
+      const [, , options] = tracing.startActiveSpan.mock.calls[0];
+      expect(options?.attributes?.['gen_ai.conversation.id']).toBe('conv-123');
+      expect(options?.attributes?.['gen_ai.agent.id']).toBe('agent-456');
+    });
+
+    it('does not allow baggage to override spec-required attributes', async () => {
+      const tracing = tracingServiceMock.mock();
+      tracing.getActiveBaggage.mockReturnValue({
+        getEntry: () => ({ value: 'injected' }),
+        getAllEntries: () => [
+          ['gen_ai.tool.name', { value: 'injected' }],
+          ['gen_ai.conversation.id', { value: 'conv-safe' }],
+        ],
+      });
+
+      await invokeMockAction({ tracing });
+
+      const [, , options] = tracing.startActiveSpan.mock.calls[0];
+      expect(options?.attributes?.['gen_ai.tool.name']).toBe(
+        'test.mock-action',
+      );
+      expect(options?.attributes?.['gen_ai.conversation.id']).toBe('conv-safe');
+    });
+
+    it('omits gen_ai baggage attributes when no baggage is present', async () => {
+      const tracing = tracingServiceMock.mock();
+      await invokeMockAction({ tracing });
+
+      const [, , options] = tracing.startActiveSpan.mock.calls[0];
+      expect(options?.attributes).not.toHaveProperty('gen_ai.conversation.id');
+      expect(options?.attributes).not.toHaveProperty('gen_ai.agent.id');
+    });
+
     it('includes tool arguments in the span options and sets the result via setAttribute when captureToolPayloads is true', async () => {
       const tracing = tracingServiceMock.mock();
       await invokeMockAction({ tracing, captureToolPayloads: true });

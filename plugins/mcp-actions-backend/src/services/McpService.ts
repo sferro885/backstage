@@ -43,6 +43,21 @@ function safeStringify(value: unknown): string {
   }
 }
 
+function baggageAttributes(
+  tracingService: TracingService,
+  prefix: string,
+): Record<string, string> {
+  const baggage = tracingService.getActiveBaggage();
+  if (!baggage) return {};
+  const attrs: Record<string, string> = {};
+  for (const [key, entry] of baggage.getAllEntries()) {
+    if (key.startsWith(prefix)) {
+      attrs[key] = entry.value;
+    }
+  }
+  return attrs;
+}
+
 export class McpService {
   private readonly actions: ActionsService;
   private readonly namespacedToolNames: boolean;
@@ -223,6 +238,9 @@ export class McpService {
             kind: 'server',
             credentials,
             attributes: {
+              // Baggage entries go first so spec-required attributes below
+              // always win if a client happens to send a colliding key.
+              ...baggageAttributes(this.tracingService, 'gen_ai.'),
               'mcp.method.name': 'tools/call',
               'gen_ai.tool.name': params.name,
               'gen_ai.operation.name': 'execute_tool',
