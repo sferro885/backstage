@@ -1747,7 +1747,7 @@ describe('DefaultEntitiesCatalog', () => {
         const request: QueryEntitiesInitialRequest = {
           limit: 10,
           credentials: mockCredentials.none(),
-          skipTotalItems: true,
+          totalItems: 'exclude',
         };
         let response = await catalog.queryEntities(request);
         expect(response).toEqual({

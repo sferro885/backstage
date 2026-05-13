@@ -32,6 +32,7 @@ import {
   EntityPagination,
   QueryEntitiesRequest,
   QueryEntitiesResponse,
+  TotalItemsMode,
 } from '../catalog/types';
 import {
   DbFinalEntitiesRow,
@@ -377,19 +378,18 @@ export class DefaultEntitiesCatalog implements EntitiesCatalog {
 
     const cursor: Omit<Cursor, 'orderFieldValues'> & {
       orderFieldValues?: (string | null)[];
-      skipTotalItems: boolean;
+      totalItemsMode: TotalItemsMode;
     } = {
       orderFields: [],
       isPrevious: false,
       ...parseCursorFromRequest(request),
     };
 
-    // For performance reasons we invoke the count query only on the first
-    // request. The result is then embedded into the cursor for subsequent
-    // requests. Therefore this can be undefined here, but will then get
-    // populated further down.
+    // The count is computed only on the first request and then propagated
+    // via the cursor on subsequent pages. Callers that don't need it can
+    // opt out entirely with totalItems: 'exclude'.
     const shouldComputeTotalItems =
-      cursor.totalItems === undefined && !cursor.skipTotalItems;
+      cursor.totalItems === undefined && cursor.totalItemsMode !== 'exclude';
     const isFetchingBackwards = cursor.isPrevious;
 
     if (cursor.orderFields.length > 1) {
@@ -397,21 +397,29 @@ export class DefaultEntitiesCatalog implements EntitiesCatalog {
     }
 
     const sortField = cursor.orderFields.at(0);
+    const isOrderingDescending = sortField?.order === 'desc';
 
-    // The first part of the query builder is a subquery that applies all of the
-    // filtering. When a sort field is specified, the search table for that key
-    // drives the query via INNER JOIN so that the (key, value, entity_id)
-    // index walks rows in sort order, letting LIMIT short-circuit. Entities
-    // that lack the sort field are excluded from both the result set and the
-    // count — this is a deliberate choice that aligns totalItems with the
-    // number of entities actually reachable through cursor pagination.
-    const dbQuery = this.database.with(
-      'filtered',
-      ['entity_id', 'final_entity', ...(sortField ? ['value'] : [])],
-      inner => {
-        if (sortField) {
-          inner
-            .from('search')
+    let order = sortField?.order ?? 'asc';
+    if (isFetchingBackwards) {
+      order = invertOrder(order);
+    }
+
+    const normalizedFullTextFilterTerm = cursor.fullTextFilter?.term?.trim();
+    const textFilterFields = cursor.fullTextFilter?.fields ?? [
+      sortField?.field || 'metadata.uid',
+    ];
+
+    // The list query drives from `search` for the sort field's key (when an
+    // order field is specified) so that the (key, value, entity_id) index
+    // walks rows in sort order and LIMIT short-circuits. When no order field
+    // is given it drives from `final_entities` directly. Entities that lack
+    // the sort field are excluded from the result set — this aligns with the
+    // navigable cursor pagination contract.
+    type ListRow = Pick<DbFinalEntitiesRow, 'entity_id' | 'final_entity'> &
+      Partial<Pick<DbSearchRow, 'value'>>;
+    const buildListQuery = (): Knex.QueryBuilder<any, ListRow[]> => {
+      const q: Knex.QueryBuilder<any, any> = sortField
+        ? this.database('search')
             .innerJoin(
               'final_entities',
               'final_entities.entity_id',
@@ -423,177 +431,213 @@ export class DefaultEntitiesCatalog implements EntitiesCatalog {
               entity_id: 'final_entities.entity_id',
               final_entity: 'final_entities.final_entity',
               value: 'search.value',
-            });
-        } else {
-          inner
-            .from<DbFinalEntitiesRow>('final_entities')
+            })
+        : this.database<DbFinalEntitiesRow>('final_entities')
             .whereNotNull('final_entity')
             .select({
               entity_id: 'final_entities.entity_id',
               final_entity: 'final_entities.final_entity',
             });
-        }
 
-        // Add regular filters and/or predicate query, if given
-        if (cursor.filter || cursor.query) {
-          applyEntityFilterToQuery({
-            filter: cursor.filter,
-            query: cursor.query,
-            targetQuery: inner,
-            onEntityIdField: 'final_entities.entity_id',
-            knex: this.database,
-          });
-        }
-
-        // Add full text search filters, if given
-        const normalizedFullTextFilterTerm =
-          cursor.fullTextFilter?.term?.trim();
-        const textFilterFields = cursor.fullTextFilter?.fields ?? [
-          sortField?.field || 'metadata.uid',
-        ];
-        if (normalizedFullTextFilterTerm) {
-          if (
-            textFilterFields.length === 1 &&
-            textFilterFields[0] === sortField?.field
-          ) {
-            // If there is one item, apply the like query to the top level query which is already
-            //   filtered based on the singular sortField.
-            inner.andWhereRaw(
-              'search.value like ?',
-              `%${normalizedFullTextFilterTerm.toLocaleLowerCase('en-US')}%`,
-            );
-          } else {
-            const matchQuery = this.database<DbSearchRow>('search')
-              .select('search.entity_id')
-              // textFilterFields must be lowercased to match searchable keys in database, i.e. spec.profile.displayName -> spec.profile.displayname
-              .whereIn(
-                'search.key',
-                textFilterFields.map(field => field.toLocaleLowerCase('en-US')),
-              )
-              .andWhere(function keyFilter() {
-                this.andWhereRaw(
-                  'search.value like ?',
-                  `%${normalizedFullTextFilterTerm.toLocaleLowerCase(
-                    'en-US',
-                  )}%`,
-                );
-              });
-            inner.andWhere('final_entities.entity_id', 'in', matchQuery);
-          }
-        }
-      },
-    );
-
-    // Only pay the cost of counting the number of items if needed
-    if (shouldComputeTotalItems) {
-      // Note the intentional cross join here. The filtered_count dataset is
-      // always exactly one row, so it won't grow the result unnecessarily. But
-      // it's also important that there IS at least one row, because even if the
-      // filtered dataset is empty, we still want to know the total number of
-      // items.
-      dbQuery
-        .with('filtered_count', ['count'], inner =>
-          inner.from('filtered').count('*', { as: 'count' }),
-        )
-        .fromRaw('filtered_count, filtered')
-        .select('count', 'filtered.*');
-    } else {
-      dbQuery.from('filtered').select('*');
-    }
-
-    const isOrderingDescending = sortField?.order === 'desc';
-
-    // Move forward (or backward) in the set to the correct cursor position
-    if (cursor.orderFieldValues) {
-      if (cursor.orderFieldValues.length === 2) {
-        // The first will be the sortField value, the second the entity_id
-        const [first, second] = cursor.orderFieldValues;
-        dbQuery.andWhere(function nested() {
-          this.where(
-            'filtered.value',
-            isFetchingBackwards !== isOrderingDescending ? '<' : '>',
-            first,
-          )
-            .orWhere('filtered.value', '=', first)
-            .andWhere(
-              'filtered.entity_id',
-              isFetchingBackwards !== isOrderingDescending ? '<' : '>',
-              second,
-            );
+      if (cursor.filter || cursor.query) {
+        applyEntityFilterToQuery({
+          filter: cursor.filter,
+          query: cursor.query,
+          targetQuery: q,
+          onEntityIdField: 'final_entities.entity_id',
+          knex: this.database,
         });
-      } else if (cursor.orderFieldValues.length === 1) {
-        // This will be the entity_id
-        const [first] = cursor.orderFieldValues;
-        dbQuery.andWhere('entity_id', isFetchingBackwards ? '<' : '>', first);
       }
-    }
 
-    // Add the ordering
-    let order = sortField?.order ?? 'asc';
-    if (isFetchingBackwards) {
-      order = invertOrder(order);
-    }
-    if (this.database.client.config.client === 'pg') {
-      // pg correctly orders by the column value and handling nulls in one go
-      dbQuery.orderBy([
-        ...(sortField
-          ? [
-              {
-                column: 'filtered.value',
-                order,
-                nulls: 'last',
-              },
-            ]
-          : []),
-        {
-          column: 'filtered.entity_id',
-          order,
-        },
-      ]);
-    } else {
-      // sqlite and mysql translate the above statement ONLY into "order by (value is null) asc"
-      // no matter what the order is, for some reason, so we have to manually add back the statement
-      // that translates to "order by value <order>" while avoiding to give an order
-      dbQuery.orderBy([
-        ...(sortField
-          ? [
-              {
-                column: 'filtered.value',
-                order: undefined,
-                nulls: 'last',
-              },
-              {
-                column: 'filtered.value',
-                order,
-              },
-            ]
-          : []),
-        {
-          column: 'filtered.entity_id',
-          order,
-        },
-      ]);
-    }
+      if (normalizedFullTextFilterTerm) {
+        if (
+          sortField &&
+          textFilterFields.length === 1 &&
+          textFilterFields[0] === sortField.field
+        ) {
+          // Reuse the already-joined search row's value column.
+          q.andWhere(
+            this.database.raw('search.value like ?', [
+              `%${normalizedFullTextFilterTerm.toLocaleLowerCase('en-US')}%`,
+            ]),
+          );
+        } else {
+          const matchQuery = this.database<DbSearchRow>('search')
+            .select('search.entity_id')
+            // textFilterFields must be lowercased to match searchable keys in database, i.e. spec.profile.displayName -> spec.profile.displayname
+            .whereIn(
+              'search.key',
+              textFilterFields.map(field => field.toLocaleLowerCase('en-US')),
+            )
+            .andWhere(function keyFilter() {
+              this.andWhereRaw(
+                'search.value like ?',
+                `%${normalizedFullTextFilterTerm.toLocaleLowerCase('en-US')}%`,
+              );
+            });
+          q.andWhere('final_entities.entity_id', 'in', matchQuery);
+        }
+      }
 
-    // Apply a manually set initial offset
-    if (
-      isQueryEntitiesInitialRequest(request) &&
-      request.offset !== undefined
-    ) {
-      dbQuery.offset(request.offset);
-    }
-    // fetch an extra item to check if there are more items.
-    dbQuery.limit(isFetchingBackwards ? limit : limit + 1);
+      // Cursor seek
+      if (cursor.orderFieldValues) {
+        if (cursor.orderFieldValues.length === 2 && sortField) {
+          const [first, second] = cursor.orderFieldValues;
+          q.andWhere(function nested() {
+            this.where(
+              'search.value',
+              isFetchingBackwards !== isOrderingDescending ? '<' : '>',
+              first,
+            )
+              .orWhere('search.value', '=', first)
+              .andWhere(
+                'final_entities.entity_id',
+                isFetchingBackwards !== isOrderingDescending ? '<' : '>',
+                second,
+              );
+          });
+        } else if (cursor.orderFieldValues.length === 1) {
+          const [first] = cursor.orderFieldValues;
+          q.andWhere(
+            'final_entities.entity_id',
+            isFetchingBackwards ? '<' : '>',
+            first,
+          );
+        }
+      }
 
-    const rows = shouldComputeTotalItems || limit > 0 ? await dbQuery : [];
+      if (this.database.client.config.client === 'pg') {
+        // pg correctly orders by the column value and handles nulls in one go
+        q.orderBy([
+          ...(sortField
+            ? [
+                {
+                  column: 'search.value',
+                  order,
+                  nulls: 'last',
+                },
+              ]
+            : []),
+          {
+            column: 'final_entities.entity_id',
+            order,
+          },
+        ]);
+      } else {
+        // sqlite and mysql translate the above statement ONLY into "order by (value is null) asc"
+        // no matter what the order is, for some reason, so we have to manually add back the statement
+        // that translates to "order by value <order>" while avoiding to give an order
+        q.orderBy([
+          ...(sortField
+            ? [
+                {
+                  column: 'search.value',
+                  order: undefined,
+                  nulls: 'last',
+                },
+                {
+                  column: 'search.value',
+                  order,
+                },
+              ]
+            : []),
+          {
+            column: 'final_entities.entity_id',
+            order,
+          },
+        ]);
+      }
+
+      if (
+        isQueryEntitiesInitialRequest(request) &&
+        request.offset !== undefined
+      ) {
+        q.offset(request.offset);
+      }
+      // Fetch an extra item to detect if there are more items.
+      q.limit(isFetchingBackwards ? limit : limit + 1);
+
+      return q;
+    };
+
+    // The count query mirrors the list query's predicates so that
+    // totalItems is consistent with what cursor pagination can actually
+    // navigate. In particular, when an order field is specified, entities
+    // that lack that field are excluded from both — driving from
+    // `search WHERE key = <field>` is what makes that exclusion explicit.
+    const buildCountQuery = (): Knex.QueryBuilder<
+      any,
+      Array<{ count: number | string }>
+    > => {
+      const q: Knex.QueryBuilder<any, any> = sortField
+        ? this.database('search')
+            .innerJoin(
+              'final_entities',
+              'final_entities.entity_id',
+              'search.entity_id',
+            )
+            .where('search.key', sortField.field)
+            .whereNotNull('final_entities.final_entity')
+        : this.database<DbFinalEntitiesRow>('final_entities').whereNotNull(
+            'final_entity',
+          );
+
+      if (cursor.filter || cursor.query) {
+        applyEntityFilterToQuery({
+          filter: cursor.filter,
+          query: cursor.query,
+          targetQuery: q,
+          onEntityIdField: 'final_entities.entity_id',
+          knex: this.database,
+        });
+      }
+
+      if (normalizedFullTextFilterTerm) {
+        if (
+          sortField &&
+          textFilterFields.length === 1 &&
+          textFilterFields[0] === sortField.field
+        ) {
+          q.andWhere(
+            this.database.raw('search.value like ?', [
+              `%${normalizedFullTextFilterTerm.toLocaleLowerCase('en-US')}%`,
+            ]),
+          );
+        } else {
+          const matchQuery = this.database<DbSearchRow>('search')
+            .select('search.entity_id')
+            .whereIn(
+              'search.key',
+              textFilterFields.map(field => field.toLocaleLowerCase('en-US')),
+            )
+            .andWhere(function keyFilter() {
+              this.andWhereRaw('search.value like ?', [
+                `%${normalizedFullTextFilterTerm.toLocaleLowerCase('en-US')}%`,
+              ]);
+            });
+          q.andWhere('final_entities.entity_id', 'in', matchQuery);
+        }
+      }
+
+      return q.count('* as count');
+    };
+
+    // Run list and count concurrently when both are needed. Each releases its
+    // pool slot as soon as it finishes: the list slot drops on the order of
+    // milliseconds, leaving the count slot to dominate the wall time.
+    const shouldRunList = limit > 0;
+    const [rows, countRows] = await Promise.all([
+      shouldRunList ? buildListQuery() : Promise.resolve<ListRow[]>([]),
+      shouldComputeTotalItems ? buildCountQuery() : Promise.resolve(undefined),
+    ]);
 
     let totalItems: number;
     if (cursor.totalItems !== undefined) {
       totalItems = cursor.totalItems;
-    } else if (cursor.skipTotalItems) {
+    } else if (cursor.totalItemsMode === 'exclude') {
       totalItems = 0;
-    } else if (rows.length) {
-      totalItems = Number(rows[0].count);
+    } else if (countRows && countRows.length) {
+      totalItems = Number(countRows[0].count);
     } else {
       totalItems = 0;
     }
@@ -872,32 +916,34 @@ export class DefaultEntitiesCatalog implements EntitiesCatalog {
 
 function parseCursorFromRequest(
   request?: QueryEntitiesRequest,
-): Partial<Cursor> & { skipTotalItems: boolean } {
+): Partial<Cursor> & { totalItemsMode: TotalItemsMode } {
   if (isQueryEntitiesInitialRequest(request)) {
     const {
       filter,
       query,
       orderFields: sortFields = [],
       fullTextFilter,
-      skipTotalItems = false,
+      totalItems = 'include',
     } = request;
     return {
       filter,
       query,
       orderFields: sortFields,
       fullTextFilter,
-      skipTotalItems,
+      totalItemsMode: totalItems,
     };
   }
   if (isQueryEntitiesCursorRequest(request)) {
     return {
       ...request.cursor,
-      // Doesn't matter here
-      skipTotalItems: false,
+      // On cursor pages the count is either propagated via cursor.totalItems
+      // or was opted out of on the initial request — either way no count
+      // query runs here.
+      totalItemsMode: 'include',
     };
   }
   return {
-    skipTotalItems: false,
+    totalItemsMode: 'include',
   };
 }
 
@@ -906,8 +952,11 @@ function invertOrder(order: EntityOrder['order']) {
 }
 
 function sortFieldsFromRow(
-  row: DbSearchRow & DbFinalEntitiesRow,
+  row: { value?: string | null; entity_id?: string } | undefined,
   sortField?: EntityOrder | undefined,
-) {
-  return sortField ? [row?.value, row?.entity_id] : [row?.entity_id];
+): Array<string | null> {
+  if (sortField) {
+    return [row?.value ?? null, row?.entity_id ?? null];
+  }
+  return [row?.entity_id ?? null];
 }
