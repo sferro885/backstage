@@ -1,5 +1,13 @@
 # @backstage/filter-predicates
 
+## 0.1.3
+
+### Patch Changes
+
+- Updated dependencies
+  - @backstage/errors@1.3.1
+  - @backstage/config@1.3.8
+
 ## 0.1.3-next.0
 
 ### Patch Changes

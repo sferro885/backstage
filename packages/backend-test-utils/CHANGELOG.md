@@ -1,5 +1,21 @@
 # @backstage/backend-test-utils
 
+## 1.11.3
+
+### Patch Changes
+
+- 7fb12b8: Added a new tracing service mock to be leveraged in tests
+- e9b78e9: Removed the `uuid` dependency and replaced usage with the built-in `crypto.randomUUID()`.
+- Updated dependencies
+  - @backstage/errors@1.3.1
+  - @backstage/backend-plugin-api@1.9.1
+  - @backstage/backend-defaults@0.17.1
+  - @backstage/backend-app-api@1.7.0
+  - @backstage/plugin-auth-node@0.7.1
+  - @backstage/plugin-permission-common@0.9.9
+  - @backstage/config@1.3.8
+  - @backstage/plugin-events-node@0.4.22
+
 ## 1.11.3-next.2
 
 ### Patch Changes

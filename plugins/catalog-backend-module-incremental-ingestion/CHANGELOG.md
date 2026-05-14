@@ -1,5 +1,21 @@
 # @backstage/plugin-catalog-backend-module-incremental-ingestion
 
+## 0.7.12
+
+### Patch Changes
+
+- 0c5e41f: Removed unused dependencies that had no imports in source code.
+- e9b78e9: Removed the `uuid` dependency and replaced usage with the built-in `crypto.randomUUID()`.
+- Updated dependencies
+  - @backstage/errors@1.3.1
+  - @backstage/backend-plugin-api@1.9.1
+  - @backstage/backend-defaults@0.17.1
+  - @backstage/plugin-catalog-backend@3.7.0
+  - @backstage/catalog-model@1.8.1
+  - @backstage/plugin-catalog-node@2.2.1
+  - @backstage/config@1.3.8
+  - @backstage/plugin-events-node@0.4.22
+
 ## 0.7.12-next.2
 
 ### Patch Changes

@@ -1,5 +1,18 @@
 # @backstage/plugin-permission-backend
 
+## 0.7.12
+
+### Patch Changes
+
+- 0c5e41f: Removed unused dependencies that had no imports in source code.
+- Updated dependencies
+  - @backstage/errors@1.3.1
+  - @backstage/backend-plugin-api@1.9.1
+  - @backstage/plugin-auth-node@0.7.1
+  - @backstage/plugin-permission-common@0.9.9
+  - @backstage/config@1.3.8
+  - @backstage/plugin-permission-node@0.10.13
+
 ## 0.7.12-next.0
 
 ### Patch Changes

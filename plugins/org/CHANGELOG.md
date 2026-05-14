@@ -1,5 +1,21 @@
 # @backstage/plugin-org
 
+## 0.7.4
+
+### Patch Changes
+
+- f635139: Limited `@remixicon/react` dependency to versions below 4.9.0 due to a license change in that release.
+- cad156e: Replaced old config schema values from existing extensions and blueprints.
+- 085133f: The `zod` dependency has been bumped from `^3.25.76 || ^4.0.0` to `^4.0.0`, since `configSchema` requires the full Zod v4 package for JSON Schema support.
+- Updated dependencies
+  - @backstage/core-components@0.18.10
+  - @backstage/ui@0.15.0
+  - @backstage/frontend-plugin-api@0.17.0
+  - @backstage/catalog-model@1.8.1
+  - @backstage/core-plugin-api@1.12.6
+  - @backstage/plugin-catalog-react@2.1.5
+  - @backstage/plugin-catalog-common@1.1.10
+
 ## 0.7.4-next.1
 
 ### Patch Changes

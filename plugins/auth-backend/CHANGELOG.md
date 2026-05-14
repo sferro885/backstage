@@ -1,5 +1,19 @@
 # @backstage/plugin-auth-backend
 
+## 0.28.1
+
+### Patch Changes
+
+- e9b78e9: Removed the `uuid` dependency and replaced usage with the built-in `crypto.randomUUID()`.
+- 4f62755: Improved the OAuth consent dialog for MCP authorization by showing more client details, including the client metadata host for CIMD clients, the metadata URL, callback URL, and requested scopes.
+- Updated dependencies
+  - @backstage/errors@1.3.1
+  - @backstage/backend-plugin-api@1.9.1
+  - @backstage/catalog-model@1.8.1
+  - @backstage/plugin-catalog-node@2.2.1
+  - @backstage/plugin-auth-node@0.7.1
+  - @backstage/config@1.3.8
+
 ## 0.28.1-next.2
 
 ### Patch Changes

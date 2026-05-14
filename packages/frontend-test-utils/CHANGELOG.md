@@ -1,5 +1,25 @@
 # @backstage/frontend-test-utils
 
+## 0.5.3
+
+### Patch Changes
+
+- 0c298f7: Removed internal `mockWithApiFactory` helper in favor of using `attachMockApiFactory` directly.
+- fa363f9: Added support for `ExternalRouteRef` in the `mountedRoutes` option of `renderInTestApp` and `renderTestApp`.
+- 9279ea8: Added explicit type annotations to `.map()` callback parameters in `renderInTestApp` to avoid implicit `any` errors with newer TypeScript versions.
+- Updated dependencies
+  - @backstage/plugin-app@0.4.6
+  - @backstage/frontend-app-api@0.16.3
+  - @backstage/frontend-plugin-api@0.17.0
+  - @backstage/core-plugin-api@1.12.6
+  - @backstage/plugin-permission-common@0.9.9
+  - @backstage/config@1.3.8
+  - @backstage/core-app-api@1.20.1
+  - @backstage/filter-predicates@0.1.3
+  - @backstage/test-utils@1.7.18
+  - @backstage/plugin-app-react@0.2.3
+  - @backstage/plugin-permission-react@0.5.1
+
 ## 0.5.3-next.1
 
 ### Patch Changes

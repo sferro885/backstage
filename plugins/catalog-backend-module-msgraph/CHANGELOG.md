@@ -1,5 +1,17 @@
 # @backstage/plugin-catalog-backend-module-msgraph
 
+## 0.9.3
+
+### Patch Changes
+
+- e9b78e9: Removed the `uuid` dependency and replaced usage with the built-in `crypto.randomUUID()`.
+- Updated dependencies
+  - @backstage/backend-plugin-api@1.9.1
+  - @backstage/catalog-model@1.8.1
+  - @backstage/plugin-catalog-node@2.2.1
+  - @backstage/config@1.3.8
+  - @backstage/plugin-catalog-common@1.1.10
+
 ## 0.9.3-next.1
 
 ### Patch Changes

@@ -1,5 +1,23 @@
 # @backstage/plugin-kubernetes-backend
 
+## 0.21.4
+
+### Patch Changes
+
+- 1ecc3ca: Fixed spelling mistakes in internal code
+- Updated dependencies
+  - @backstage/errors@1.3.1
+  - @backstage/integration-aws-node@0.2.0
+  - @backstage/backend-plugin-api@1.9.1
+  - @backstage/catalog-model@1.8.1
+  - @backstage/plugin-catalog-node@2.2.1
+  - @backstage/plugin-kubernetes-common@0.9.12
+  - @backstage/plugin-kubernetes-node@0.4.4
+  - @backstage/plugin-permission-common@0.9.9
+  - @backstage/catalog-client@1.15.1
+  - @backstage/config@1.3.8
+  - @backstage/plugin-permission-node@0.10.13
+
 ## 0.21.4-next.1
 
 ### Patch Changes
